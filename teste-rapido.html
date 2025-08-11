@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diário Financeiro - Login</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .test-users {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .test-user {
+            background-color: #f8f9fa;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            cursor: pointer;
+            border: 1px solid #dee2e6;
+        }
+        .test-user:hover {
+            background-color: #e9ecef;
+        }
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .dashboard {
+            display: none;
+        }
+        .transaction {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .entrada {
+            border-left: 4px solid #28a745;
+        }
+        .saida {
+            border-left: 4px solid #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Tela de Login -->
+        <div id="login-screen">
+            <h1>🏦 Diário Financeiro</h1>
+            
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Senha:</label>
+                    <input type="password" id="password" required>
+                </div>
+                
+                <button type="submit">Entrar</button>
+            </form>
+            
+            <div id="message"></div>
+            
+            <div class="test-users">
+                <h3>👥 Usuários de Teste:</h3>
+                <div class="test-user" onclick="fillUser('joao@teste.com', 'MinhaSenh@123')">
+                    <strong>👤 João Silva</strong><br>
+                    <small>joao@teste.com - MinhaSenh@123</small>
+                </div>
+                <div class="test-user" onclick="fillUser('maria@teste.com', 'OutraSenh@456')">
+                    <strong>👤 Maria Santos</strong><br>
+                    <small>maria@teste.com - OutraSenh@456</small>
+                </div>
+                <div class="test-user" onclick="fillUser('pedro@teste.com', 'Pedro@789')">
+                    <strong>👤 Pedro Costa</strong><br>
+                    <small>pedro@teste.com - Pedro@789</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Dashboard -->
+        <div id="dashboard" class="dashboard">
+            <h1>💰 Dashboard</h1>
+            <div id="user-info"></div>
+            <button onclick="logout()">Sair</button>
+            
+            <h3>📊 Suas Transações:</h3>
+            <div id="transactions"></div>
+        </div>
+    </div>
+
+    <script>
+        // Dados simulados (sem backend)
+        const users = {
+            'joao@teste.com': {
+                name: 'João Silva',
+                password: 'MinhaSenh@123',
+                transactions: [
+                    { date: '2024-01-15', description: 'Salário Janeiro', amount: 5000, type: 'ENTRADA', category: 'Trabalho' },
+                    { date: '2024-01-16', description: 'Supermercado', amount: 250, type: 'SAIDA', category: 'Alimentação' },
+                    { date: '2024-01-17', description: 'Combustível', amount: 120, type: 'SAIDA', category: 'Transporte' }
+                ]
+            },
+            'maria@teste.com': {
+                name: 'Maria Santos',
+                password: 'OutraSenh@456',
+                transactions: [
+                    { date: '2024-01-15', description: 'Freelance Design', amount: 1500, type: 'ENTRADA', category: 'Trabalho' },
+                    { date: '2024-01-16', description: 'Aluguel', amount: 800, type: 'SAIDA', category: 'Moradia' },
+                    { date: '2024-01-17', description: 'Internet', amount: 80, type: 'SAIDA', category: 'Utilidades' }
+                ]
+            },
+            'pedro@teste.com': {
+                name: 'Pedro Costa',
+                password: 'Pedro@789',
+                transactions: [
+                    { date: '2024-01-15', description: 'Consultoria TI', amount: 3000, type: 'ENTRADA', category: 'Trabalho' },
+                    { date: '2024-01-16', description: 'Curso Online', amount: 199, type: 'SAIDA', category: 'Educação' },
+                    { date: '2024-01-17', description: 'Equipamentos', amount: 500, type: 'SAIDA', category: 'Trabalho' }
+                ]
+            }
+        };
+
+        let currentUser = null;
+
+        function fillUser(email, password) {
+            document.getElementById('email').value = email;
+            document.getElementById('password').value = password;
+        }
+
+        function showMessage(text, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+        }
+
+        function login(email, password) {
+            const user = users[email];
+            
+            if (!user) {
+                showMessage('❌ Usuário não encontrado!', 'error');
+                return false;
+            }
+            
+            if (user.password !== password) {
+                showMessage('❌ Senha incorreta!', 'error');
+                return false;
+            }
+            
+            currentUser = { email, ...user };
+            showMessage(`✅ Login realizado com sucesso! Bem-vindo, ${user.name}!`, 'success');
+            
+            setTimeout(() => {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+                showDashboard();
+            }, 1500);
+            
+            return true;
+        }
+
+        function showDashboard() {
+            document.getElementById('user-info').innerHTML = `
+                <h3>Olá, ${currentUser.name}! 👋</h3>
+                <p>Email: ${currentUser.email}</p>
+            `;
+            
+            const transactionsDiv = document.getElementById('transactions');
+            let transactionsHTML = '';
+            let saldo = 0;
+            
+            currentUser.transactions.forEach(t => {
+                const valor = t.type === 'ENTRADA' ? t.amount : -t.amount;
+                saldo += valor;
+                
+                transactionsHTML += `
+                    <div class="transaction ${t.type.toLowerCase()}">
+                        <div>
+                            <strong>${t.description}</strong><br>
+                            <small>${t.date} - ${t.category}</small>
+                        </div>
+                        <div>
+                            <strong style="color: ${t.type === 'ENTRADA' ? '#28a745' : '#dc3545'}">
+                                ${t.type === 'ENTRADA' ? '+' : '-'} R$ ${t.amount.toFixed(2)}
+                            </strong>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            transactionsHTML = `
+                <div style="background: #e9ecef; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                    <h4>💰 Saldo Total: R$ ${saldo.toFixed(2)}</h4>
+                </div>
+                ${transactionsHTML}
+            `;
+            
+            transactionsDiv.innerHTML = transactionsHTML;
+        }
+
+        function logout() {
+            currentUser = null;
+            document.getElementById('login-screen').style.display = 'block';
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('email').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('message').innerHTML = '';
+        }
+
+        // Event listener para o formulário
+        document.getElementById('login-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            login(email, password);
+        });
+
+        // Mostrar informações na tela
+        console.log('🎯 Diário Financeiro - Teste Rápido');
+        console.log('👥 Usuários disponíveis:');
+        console.log('📧 joao@teste.com - 🔑 MinhaSenh@123');
+        console.log('📧 maria@teste.com - 🔑 OutraSenh@456');
+        console.log('📧 pedro@teste.com - 🔑 Pedro@789');
+    </script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+# Teste da API de Gerenciamento de Usuários
+# Use este arquivo com extensões como REST Client no VS Code
+
+### Health Check
+GET http://localhost:3000/health
+
+### Registrar usuário
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "João Silva",
+  "email": "joao@exemplo.com",
+  "password": "MinhaSenh@123"
+}
+
+### Login
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "joao@exemplo.com",
+  "password": "MinhaSenh@123"
+}
+
+### Obter perfil (substitua o token)
+GET http://localhost:3000/api/users/profile
+Authorization: Bearer SEU_TOKEN_AQUI
+
+### Atualizar perfil
+PUT http://localhost:3000/api/users/profile
+Authorization: Bearer SEU_TOKEN_AQUI
+Content-Type: application/json
+
+{
+  "name": "João Silva Santos"
+}
+
+### Alterar senha
+PUT http://localhost:3000/api/users/password
+Authorization: Bearer SEU_TOKEN_AQUI
+Content-Type: application/json
+
+{
+  "currentPassword": "MinhaSenh@123",
+  "newPassword": "NovaSenha@456"
+}
+
+### Obter estatísticas do usuário
+GET http://localhost:3000/api/users/stats
+Authorization: Bearer SEU_TOKEN_AQUI
+
+### Solicitar recuperação de senha
+POST http://localhost:3000/api/users/password/reset-request
+Content-Type: application/json
+
+{
+  "email": "joao@exemplo.com"
+}
+
+### Logout
+POST http://localhost:3000/api/users/logout
+Authorization: Bearer SEU_TOKEN_AQUI
+
+### Logout de todos os dispositivos
+POST http://localhost:3000/api/users/logout-all
+Authorization: Bearer SEU_TOKEN_AQUI
+
+### Excluir conta
+DELETE http://localhost:3000/api/users/account
+Authorization: Bearer SEU_TOKEN_AQUI
+Content-Type: application/json
+
+{
+  "password": "MinhaSenh@123"
+}

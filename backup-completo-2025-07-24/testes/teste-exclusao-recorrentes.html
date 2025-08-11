@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste - Exclusão Correta de Lançamentos Recorrentes</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .transaction-list {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .transaction-item {
+            padding: 5px;
+            margin: 2px 0;
+            background: white;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .recurring { border-left: 4px solid #007bff; }
+        .generated { border-left: 4px solid #28a745; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Teste: Exclusão Correta de Lançamentos Recorrentes</h1>
+        
+        <div class="test-section warning">
+            <h3>⚠️ Problema Identificado</h3>
+            <p><strong>ANTES:</strong> Ao excluir um lançamento recorrente, os lançamentos já gerados continuavam no sistema</p>
+            <p><strong>DEPOIS:</strong> Exclusão remove tanto o recorrente quanto todos os lançamentos gerados por ele</p>
+            <p><strong>Referência:</strong> Usar a mesma lógica do QuickEntry (que está funcionando corretamente)</p>
+        </div>
+
+        <div class="grid">
+            <div class="test-section">
+                <h3>🔄 Simulação de Lançamentos Recorrentes</h3>
+                
+                <button onclick="createRecurringTransaction()">Criar Lançamento Recorrente</button>
+                <button onclick="generateTransactions()">Gerar Lançamentos</button>
+                <button onclick="deleteRecurringCorrect()">Excluir Corretamente</button>
+                <button onclick="clearAll()" class="danger">Limpar Tudo</button>
+                
+                <h4>📋 Lançamentos Recorrentes:</h4>
+                <div id="recurringList" class="transaction-list"></div>
+                
+                <h4>💰 Lançamentos Gerados:</h4>
+                <div id="generatedList" class="transaction-list"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>📊 Log de Operações</h3>
+                <button onclick="clearLog()">Limpar Log</button>
+                <div id="testLog" class="log"></div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>✅ Testes de Validação</h3>
+            
+            <button onclick="testCorrectDeletion()">Testar Exclusão Correta</button>
+            <button onclick="testIncorrectDeletion()">Testar Exclusão Incorreta (Problema)</button>
+            <button onclick="validateFix()">Validar Correção</button>
+            
+            <div id="testResults"></div>
+        </div>
+    </div>
+
+    <script>
+        // Simulação dos dados
+        let recurringTransactions = [];
+        let generatedTransactions = [];
+        let nextId = 1;
+
+        function log(message) {
+            const logElement = document.getElementById('testLog');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('testLog').textContent = '';
+        }
+
+        function updateDisplay() {
+            // Atualizar lista de recorrentes
+            const recurringList = document.getElementById('recurringList');
+            recurringList.innerHTML = recurringTransactions.map(r => 
+                `<div class="transaction-item recurring">
+                    🔄 ${r.description} - R$ ${r.amount.toFixed(2)} - Dia ${r.dayOfMonth}
+                    ${r.isActive ? '✅ Ativo' : '⏸️ Inativo'}
+                </div>`
+            ).join('');
+
+            // Atualizar lista de gerados
+            const generatedList = document.getElementById('generatedList');
+            generatedList.innerHTML = generatedTransactions.map(t => 
+                `<div class="transaction-item generated">
+                    💰 ${t.date} - ${t.description} - R$ ${t.amount.toFixed(2)}
+                    (Recorrente: ${t.recurringId})
+                </div>`
+            ).join('');
+        }
+
+        function createRecurringTransaction() {
+            const recurring = {
+                id: `rec_${nextId++}`,
+                description: `Aluguel ${nextId}`,
+                amount: 1500.00,
+                dayOfMonth: 5,
+                type: 'saida',
+                isActive: true,
+                frequency: 'until-cancelled'
+            };
+
+            recurringTransactions.push(recurring);
+            log(`➕ CRIADO: Lançamento recorrente "${recurring.description}" (ID: ${recurring.id})`);
+            updateDisplay();
+        }
+
+        function generateTransactions() {
+            recurringTransactions.forEach(recurring => {
+                if (!recurring.isActive) return;
+
+                // Gerar lançamentos para os próximos 3 meses
+                for (let i = 0; i < 3; i++) {
+                    const date = new Date();
+                    date.setMonth(date.getMonth() + i);
+                    date.setDate(recurring.dayOfMonth);
+
+                    const transaction = {
+                        id: `txn_${nextId++}`,
+                        date: date.toISOString().split('T')[0],
+                        description: recurring.description,
+                        amount: recurring.amount,
+                        type: recurring.type,
+                        recurringId: recurring.id,
+                        source: 'recurring'
+                    };
+
+                    generatedTransactions.push(transaction);
+                }
+            });
+
+            log(`🔄 GERADOS: ${generatedTransactions.length} lançamentos a partir de recorrentes`);
+            updateDisplay();
+        }
+
+        // CORREÇÃO: Exclusão correta (mesma lógica do QuickEntry)
+        function deleteRecurringCorrect() {
+            if (recurringTransactions.length === 0) {
+                log('⚠️ Nenhum lançamento recorrente para excluir');
+                return;
+            }
+
+            const recurringToDelete = recurringTransactions[0];
+            const recurringId = recurringToDelete.id;
+
+            log(`🗑️ EXCLUSÃO CORRETA: Iniciando exclusão de "${recurringToDelete.description}"`);
+
+            // 1. Contar lançamentos gerados
+            const generatedByThis = generatedTransactions.filter(t => t.recurringId === recurringId);
+            log(`📊 Encontrados ${generatedByThis.length} lançamentos gerados por este recorrente`);
+
+            // 2. Remover lançamentos gerados (mesma lógica do QuickEntry)
+            generatedTransactions = generatedTransactions.filter(t => t.recurringId !== recurringId);
+            log(`🧹 REMOVIDOS: ${generatedByThis.length} lançamentos gerados`);
+
+            // 3. Remover o lançamento recorrente
+            recurringTransactions = recurringTransactions.filter(r => r.id !== recurringId);
+            log(`✅ REMOVIDO: Lançamento recorrente "${recurringToDelete.description}"`);
+
+            log(`🎉 SUCESSO: Exclusão completa realizada!`);
+            updateDisplay();
+        }
+
+        // PROBLEMA: Exclusão incorreta (só remove o recorrente)
+        function testIncorrectDeletion() {
+            if (recurringTransactions.length === 0) {
+                log('⚠️ Nenhum lançamento recorrente para testar');
+                return;
+            }
+
+            const recurringToDelete = recurringTransactions[0];
+            const recurringId = recurringToDelete.id;
+
+            log(`❌ EXCLUSÃO INCORRETA: Removendo apenas o recorrente "${recurringToDelete.description}"`);
+
+            // PROBLEMA: Só remove o recorrente, deixa os lançamentos gerados
+            recurringTransactions = recurringTransactions.filter(r => r.id !== recurringId);
+            
+            const remainingGenerated = generatedTransactions.filter(t => t.recurringId === recurringId);
+            log(`⚠️ PROBLEMA: ${remainingGenerated.length} lançamentos gerados continuam no sistema!`);
+            log(`💸 RESULTADO: Valores continuam sendo contabilizados incorretamente`);
+
+            updateDisplay();
+        }
+
+        function testCorrectDeletion() {
+            clearAll();
+            createRecurringTransaction();
+            generateTransactions();
+            
+            const initialGenerated = generatedTransactions.length;
+            log(`🧪 TESTE: Criado 1 recorrente que gerou ${initialGenerated} lançamentos`);
+            
+            deleteRecurringCorrect();
+            
+            const finalGenerated = generatedTransactions.length;
+            const finalRecurring = recurringTransactions.length;
+            
+            const success = finalGenerated === 0 && finalRecurring === 0;
+            
+            updateResults('Exclusão Correta', success, 
+                `Recorrentes: ${finalRecurring}, Gerados: ${finalGenerated}`);
+        }
+
+        function validateFix() {
+            log('\n🔍 VALIDAÇÃO: Testando correção implementada');
+            
+            // Simular cenário real
+            clearAll();
+            
+            // Criar múltiplos recorrentes
+            createRecurringTransaction();
+            createRecurringTransaction();
+            generateTransactions();
+            
+            const initialRecurring = recurringTransactions.length;
+            const initialGenerated = generatedTransactions.length;
+            
+            log(`📊 INICIAL: ${initialRecurring} recorrentes, ${initialGenerated} gerados`);
+            
+            // Excluir um recorrente corretamente
+            deleteRecurringCorrect();
+            
+            const finalRecurring = recurringTransactions.length;
+            const finalGenerated = generatedTransactions.length;
+            
+            log(`📊 FINAL: ${finalRecurring} recorrentes, ${finalGenerated} gerados`);
+            
+            // Validar resultado
+            const expectedRecurring = initialRecurring - 1;
+            const generatedFromDeleted = Math.floor(initialGenerated / initialRecurring);
+            const expectedGenerated = initialGenerated - generatedFromDeleted;
+            
+            const success = finalRecurring === expectedRecurring && finalGenerated === expectedGenerated;
+            
+            updateResults('Validação da Correção', success, 
+                `Esperado: ${expectedRecurring} rec, ${expectedGenerated} ger. Atual: ${finalRecurring} rec, ${finalGenerated} ger`);
+        }
+
+        function updateResults(testName, passed, details) {
+            const resultsElement = document.getElementById('testResults');
+            const status = passed ? '✅ PASSOU' : '❌ FALHOU';
+            const className = passed ? 'success' : 'error';
+            
+            resultsElement.innerHTML += `
+                <div class="test-section ${className}">
+                    <strong>${testName}:</strong> ${status}<br>
+                    <small>${details}</small>
+                </div>
+            `;
+        }
+
+        function clearAll() {
+            recurringTransactions = [];
+            generatedTransactions = [];
+            nextId = 1;
+            log('🧹 LIMPEZA: Todos os dados removidos');
+            updateDisplay();
+        }
+
+        // Inicializar
+        document.addEventListener('DOMContentLoaded', function() {
+            log('🚀 Sistema de teste carregado');
+            log('📋 Use os botões para simular o problema e testar a correção');
+            updateDisplay();
+        });
+    </script>
+</body>
+</html>

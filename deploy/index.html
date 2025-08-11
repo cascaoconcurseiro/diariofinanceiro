@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diário Financeiro - Sistema Multiusuário</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💰</text></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 450px;
+            animation: slideUp 0.6s ease-out;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .logo h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        
+        .logo p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 15px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .test-users {
+            margin-top: 30px;
+            padding-top: 25px;
+            border-top: 1px solid #e1e5e9;
+        }
+        
+        .test-users h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        
+        .test-user {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 10px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .test-user:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+            transform: translateY(-1px);
+        }
+        
+        .test-user strong {
+            color: #333;
+            display: block;
+            margin-bottom: 4px;
+        }
+        
+        .test-user small {
+            color: #666;
+            font-size: 12px;
+        }
+        
+        .message {
+            padding: 12px 16px;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-weight: 500;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .dashboard {
+            display: none;
+            animation: slideUp 0.6s ease-out;
+        }
+        
+        .user-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+        
+        .user-header h2 {
+            margin-bottom: 5px;
+        }
+        
+        .balance-card {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+        
+        .balance-card h3 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        .balance-card p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .transactions-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .transactions-header h3 {
+            color: #333;
+        }
+        
+        .transaction {
+            background: white;
+            border: 1px solid #e1e5e9;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+        
+        .transaction:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transform: translateY(-1px);
+        }
+        
+        .transaction-info h4 {
+            color: #333;
+            margin-bottom: 4px;
+        }
+        
+        .transaction-info small {
+            color: #666;
+            font-size: 12px;
+        }
+        
+        .transaction-amount {
+            font-weight: 700;
+            font-size: 16px;
+        }
+        
+        .entrada {
+            border-left: 4px solid #28a745;
+        }
+        
+        .entrada .transaction-amount {
+            color: #28a745;
+        }
+        
+        .saida {
+            border-left: 4px solid #dc3545;
+        }
+        
+        .saida .transaction-amount {
+            color: #dc3545;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            margin-top: 20px;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .stat-card {
+            background: white;
+            border: 1px solid #e1e5e9;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-card h4 {
+            color: #666;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        
+        .stat-card .value {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        
+        .stat-card.entrada .value {
+            color: #28a745;
+        }
+        
+        .stat-card.saida .value {
+            color: #dc3545;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                padding: 30px 20px;
+                margin: 10px;
+            }
+            
+            .stats {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Tela de Login -->
+        <div id="login-screen">
+            <div class="logo">
+                <h1>💰 Diário Financeiro</h1>
+                <p>Sistema Multiusuário de Controle Financeiro</p>
+            </div>
+            
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="email">📧 Email:</label>
+                    <input type="email" id="email" placeholder="seu@email.com" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">🔒 Senha:</label>
+                    <input type="password" id="password" placeholder="Sua senha" required>
+                </div>
+                
+                <button type="submit" class="btn" id="login-btn">
+                    <span id="login-text">Entrar</span>
+                    <span id="login-loading" class="loading" style="display: none;"></span>
+                </button>
+            </form>
+            
+            <div id="message"></div>
+            
+            <div class="test-users">
+                <h3>👥 Usuários de Teste</h3>
+                <div class="test-user" onclick="fillUser('joao@teste.com', 'MinhaSenh@123')">
+                    <strong>👤 João Silva</strong>
+                    <small>Funcionário CLT • joao@teste.com</small>
+                </div>
+                <div class="test-user" onclick="fillUser('maria@teste.com', 'OutraSenh@456')">
+                    <strong>👤 Maria Santos</strong>
+                    <small>Freelancer • maria@teste.com</small>
+                </div>
+                <div class="test-user" onclick="fillUser('pedro@teste.com', 'Pedro@789')">
+                    <strong>👤 Pedro Costa</strong>
+                    <small>Consultor TI • pedro@teste.com</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Dashboard -->
+        <div id="dashboard" class="dashboard">
+            <div class="user-header">
+                <h2 id="user-name">Bem-vindo!</h2>
+                <p id="user-email"></p>
+            </div>
+            
+            <div class="balance-card">
+                <h3 id="balance">R$ 0,00</h3>
+                <p>Saldo Total</p>
+            </div>
+            
+            <div class="stats">
+                <div class="stat-card entrada">
+                    <h4>Entradas</h4>
+                    <div class="value" id="total-entradas">R$ 0,00</div>
+                </div>
+                <div class="stat-card saida">
+                    <h4>Saídas</h4>
+                    <div class="value" id="total-saidas">R$ 0,00</div>
+                </div>
+            </div>
+            
+            <div class="transactions-header">
+                <h3>📊 Suas Transações</h3>
+            </div>
+            
+            <div id="transactions"></div>
+            
+            <button onclick="logout()" class="btn btn-secondary">🚪 Sair</button>
+        </div>
+    </div>
+
+    <script>
+        // Dados simulados dos usuários
+        const users = {
+            'joao@teste.com': {
+                name: 'João Silva',
+                password: 'MinhaSenh@123',
+                profile: 'Funcionário CLT',
+                transactions: [
+                    { id: 1, date: '2024-01-15', description: 'Salário Janeiro', amount: 5000, type: 'ENTRADA', category: 'Trabalho' },
+                    { id: 2, date: '2024-01-16', description: 'Supermercado Extra', amount: 280, type: 'SAIDA', category: 'Alimentação' },
+                    { id: 3, date: '2024-01-17', description: 'Combustível', amount: 150, type: 'SAIDA', category: 'Transporte' },
+                    { id: 4, date: '2024-01-18', description: 'Academia', amount: 89, type: 'SAIDA', category: 'Saúde' },
+                    { id: 5, date: '2024-01-19', description: 'Freelance Extra', amount: 800, type: 'ENTRADA', category: 'Trabalho' }
+                ]
+            },
+            'maria@teste.com': {
+                name: 'Maria Santos',
+                password: 'OutraSenh@456',
+                profile: 'Designer Freelancer',
+                transactions: [
+                    { id: 6, date: '2024-01-15', description: 'Projeto Website', amount: 2500, type: 'ENTRADA', category: 'Trabalho' },
+                    { id: 7, date: '2024-01-16', description: 'Aluguel', amount: 1200, type: 'SAIDA', category: 'Moradia' },
+                    { id: 8, date: '2024-01-17', description: 'Internet + Telefone', amount: 120, type: 'SAIDA', category: 'Utilidades' },
+                    { id: 9, date: '2024-01-18', description: 'Curso Online', amount: 199, type: 'SAIDA', category: 'Educação' },
+                    { id: 10, date: '2024-01-19', description: 'Logo Design', amount: 600, type: 'ENTRADA', category: 'Trabalho' }
+                ]
+            },
+            'pedro@teste.com': {
+                name: 'Pedro Costa',
+                password: 'Pedro@789',
+                profile: 'Consultor de TI',
+                transactions: [
+                    { id: 11, date: '2024-01-15', description: 'Consultoria Empresa A', amount: 4500, type: 'ENTRADA', category: 'Consultoria' },
+                    { id: 12, date: '2024-01-16', description: 'Equipamentos TI', amount: 800, type: 'SAIDA', category: 'Equipamentos' },
+                    { id: 13, date: '2024-01-17', description: 'Coworking', amount: 300, type: 'SAIDA', category: 'Escritório' },
+                    { id: 14, date: '2024-01-18', description: 'Certificação AWS', amount: 150, type: 'SAIDA', category: 'Educação' },
+                    { id: 15, date: '2024-01-19', description: 'Projeto Mobile', amount: 3200, type: 'ENTRADA', category: 'Desenvolvimento' }
+                ]
+            }
+        };
+
+        let currentUser = null;
+
+        function fillUser(email, password) {
+            document.getElementById('email').value = email;
+            document.getElementById('password').value = password;
+        }
+
+        function showMessage(text, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+            
+            // Auto-hide success messages
+            if (type === 'success') {
+                setTimeout(() => {
+                    messageDiv.innerHTML = '';
+                }, 3000);
+            }
+        }
+
+        function setLoading(loading) {
+            const btn = document.getElementById('login-btn');
+            const text = document.getElementById('login-text');
+            const loadingSpinner = document.getElementById('login-loading');
+            
+            btn.disabled = loading;
+            text.style.display = loading ? 'none' : 'inline';
+            loadingSpinner.style.display = loading ? 'inline-block' : 'none';
+        }
+
+        function login(email, password) {
+            setLoading(true);
+            
+            // Simular delay de rede
+            setTimeout(() => {
+                const user = users[email];
+                
+                if (!user) {
+                    showMessage('❌ Usuário não encontrado! Verifique o email.', 'error');
+                    setLoading(false);
+                    return false;
+                }
+                
+                if (user.password !== password) {
+                    showMessage('❌ Senha incorreta! Tente novamente.', 'error');
+                    setLoading(false);
+                    return false;
+                }
+                
+                currentUser = { email, ...user };
+                showMessage(`✅ Login realizado com sucesso! Bem-vindo, ${user.name}!`, 'success');
+                
+                setTimeout(() => {
+                    document.getElementById('login-screen').style.display = 'none';
+                    document.getElementById('dashboard').style.display = 'block';
+                    showDashboard();
+                    setLoading(false);
+                }, 1500);
+                
+                return true;
+            }, 800);
+        }
+
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL'
+            }).format(value);
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('pt-BR');
+        }
+
+        function showDashboard() {
+            // Atualizar informações do usuário
+            document.getElementById('user-name').textContent = `Olá, ${currentUser.name}! 👋`;
+            document.getElementById('user-email').textContent = currentUser.email;
+            
+            // Calcular estatísticas
+            let totalEntradas = 0;
+            let totalSaidas = 0;
+            
+            currentUser.transactions.forEach(t => {
+                if (t.type === 'ENTRADA') {
+                    totalEntradas += t.amount;
+                } else {
+                    totalSaidas += t.amount;
+                }
+            });
+            
+            const saldo = totalEntradas - totalSaidas;
+            
+            // Atualizar cards de estatísticas
+            document.getElementById('balance').textContent = formatCurrency(saldo);
+            document.getElementById('total-entradas').textContent = formatCurrency(totalEntradas);
+            document.getElementById('total-saidas').textContent = formatCurrency(totalSaidas);
+            
+            // Mostrar transações
+            const transactionsDiv = document.getElementById('transactions');
+            let transactionsHTML = '';
+            
+            // Ordenar transações por data (mais recente primeiro)
+            const sortedTransactions = [...currentUser.transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            sortedTransactions.forEach(t => {
+                transactionsHTML += `
+                    <div class="transaction ${t.type.toLowerCase()}">
+                        <div class="transaction-info">
+                            <h4>${t.description}</h4>
+                            <small>${formatDate(t.date)} • ${t.category}</small>
+                        </div>
+                        <div class="transaction-amount">
+                            ${t.type === 'ENTRADA' ? '+' : '-'} ${formatCurrency(t.amount)}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            if (transactionsHTML === '') {
+                transactionsHTML = '<p style="text-align: center; color: #666; padding: 20px;">Nenhuma transação encontrada.</p>';
+            }
+            
+            transactionsDiv.innerHTML = transactionsHTML;
+        }
+
+        function logout() {
+            currentUser = null;
+            document.getElementById('login-screen').style.display = 'block';
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('email').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('message').innerHTML = '';
+            showMessage('👋 Logout realizado com sucesso!', 'success');
+        }
+
+        // Event listener para o formulário
+        document.getElementById('login-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            
+            if (!email || !password) {
+                showMessage('⚠️ Por favor, preencha todos os campos.', 'error');
+                return;
+            }
+            
+            login(email, password);
+        });
+
+        // Mostrar informações no console
+        console.log('🎯 Diário Financeiro - Sistema Multiusuário');
+        console.log('👥 Usuários disponíveis:');
+        console.log('📧 joao@teste.com - 🔑 MinhaSenh@123 (Funcionário CLT)');
+        console.log('📧 maria@teste.com - 🔑 OutraSenh@456 (Designer Freelancer)');
+        console.log('📧 pedro@teste.com - 🔑 Pedro@789 (Consultor TI)');
+        console.log('✨ Clique nos usuários de teste para preencher automaticamente!');
+        
+        // Easter egg - demonstração automática
+        let demoTimeout;
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                clearTimeout(demoTimeout);
+                fillUser('joao@teste.com', 'MinhaSenh@123');
+                demoTimeout = setTimeout(() => {
+                    document.getElementById('login-form').dispatchEvent(new Event('submit'));
+                }, 1000);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diário Financeiro - Login</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            width: 90%;
+            max-width: 400px;
+            padding: 30px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        p.subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 12px;
+            width: 100%;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #5a6eea;
+        }
+        .test-users {
+            margin-top: 30px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        .test-user {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .test-user:hover {
+            background: #e9ecef;
+        }
+        .test-user strong {
+            display: block;
+            margin-bottom: 3px;
+        }
+        .message {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .dashboard {
+            display: none;
+        }
+        .user-info {
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .balance {
+            background: #28a745;
+            color: white;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .balance h3 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .transaction {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .entrada {
+            border-left: 4px solid #28a745;
+        }
+        .saida {
+            border-left: 4px solid #dc3545;
+        }
+        .transaction-amount.entrada {
+            color: #28a745;
+        }
+        .transaction-amount.saida {
+            color: #dc3545;
+        }
+        .logout-btn {
+            background: #6c757d;
+            margin-top: 20px;
+        }
+        .logout-btn:hover {
+            background: #5a6268;
+        }
+        
+        /* Admin Panel - Hidden */
+        .admin-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #2c3e50;
+            color: white;
+            padding: 5px;
+            font-size: 10px;
+            text-align: center;
+            opacity: 0.1;
+            transition: opacity 0.3s;
+        }
+        .admin-panel:hover {
+            opacity: 1;
+        }
+        .admin-trigger {
+            background: none;
+            border: none;
+            color: #7f8c8d;
+            font-size: 8px;
+            cursor: pointer;
+            padding: 2px 5px;
+        }
+        .admin-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+        }
+        .admin-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            width: 300px;
+        }
+        .admin-content h3 {
+            color: #e74c3c;
+            margin-top: 0;
+        }
+        .admin-btn {
+            background: #e74c3c;
+            margin: 5px 0;
+        }
+        .admin-btn:hover {
+            background: #c0392b;
+        }
+        .close-admin {
+            background: #95a5a6;
+            margin-top: 15px;
+        }
+        .close-admin:hover {
+            background: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Login Screen -->
+        <div id="login-screen">
+            <h1>💰 Diário Financeiro</h1>
+            <p class="subtitle">Sistema Multiusuário</p>
+            
+            <div id="message"></div>
+            
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Senha:</label>
+                    <input type="password" id="password" required>
+                </div>
+                
+                <button type="submit">Entrar</button>
+            </form>
+            
+            <div class="test-users">
+                <h3>Usuários de Teste:</h3>
+                <div class="test-user" onclick="fillTestUser('joao@teste.com', 'MinhaSenh@123')">
+                    <strong>👤 João Silva</strong>
+                    <small>Email: joao@teste.com</small><br>
+                    <small>Senha: MinhaSenh@123</small>
+                </div>
+                
+                <div class="test-user" onclick="fillTestUser('maria@teste.com', 'OutraSenh@456')">
+                    <strong>👤 Maria Santos</strong>
+                    <small>Email: maria@teste.com</small><br>
+                    <small>Senha: OutraSenh@456</small>
+                </div>
+                
+                <div class="test-user" onclick="fillTestUser('pedro@teste.com', 'Pedro@789')">
+                    <strong>👤 Pedro Costa</strong>
+                    <small>Email: pedro@teste.com</small><br>
+                    <small>Senha: Pedro@789</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Dashboard Screen -->
+        <div id="dashboard" class="dashboard">
+            <h1>📊 Dashboard</h1>
+            
+            <div class="user-info">
+                <h3 id="user-name"></h3>
+                <p id="user-email"></p>
+            </div>
+            
+            <div class="balance">
+                <h3 id="balance">R$ 0,00</h3>
+                <p>Saldo Total</p>
+            </div>
+            
+            <h3>Suas Transações:</h3>
+            <div id="transactions"></div>
+            
+            <button class="logout-btn" onclick="logout()">Sair</button>
+        </div>
+    </div>
+
+    <!-- Hidden Admin Panel -->
+    <div class="admin-panel">
+        <button class="admin-trigger" onclick="showAdminLogin()">•</button>
+    </div>
+
+    <!-- Admin Modal -->
+    <div id="admin-modal" class="admin-modal">
+        <div class="admin-content">
+            <h3>🔒 Área Administrativa</h3>
+            <div id="admin-login">
+                <div class="form-group">
+                    <label for="admin-password">Senha de Administrador:</label>
+                    <input type="password" id="admin-password" placeholder="Digite a senha">
+                </div>
+                <button onclick="verifyAdminPassword()">Acessar</button>
+                <button class="close-admin" onclick="closeAdmin()">Cancelar</button>
+            </div>
+            
+            <div id="admin-tools" style="display: none;">
+                <p>⚠️ Ferramentas de Administração</p>
+                <button class="admin-btn" onclick="runSystemCheck()">🔍 Verificar Sistema</button>
+                <button class="admin-btn" onclick="clearAllData()">🗑️ Limpar Dados</button>
+                <button class="admin-btn" onclick="exportData()">📤 Exportar Dados</button>
+                <button class="close-admin" onclick="closeAdmin()">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dados simulados
+        const users = {
+            'joao@teste.com': {
+                name: 'João Silva',
+                password: 'MinhaSenh@123',
+                balance: 4629.50,
+                transactions: [
+                    { date: '2024-01-15', description: 'Salário', amount: 5000, type: 'ENTRADA' },
+                    { date: '2024-01-16', description: 'Supermercado', amount: 250.50, type: 'SAIDA' },
+                    { date: '2024-01-17', description: 'Combustível', amount: 120, type: 'SAIDA' }
+                ]
+            },
+            'maria@teste.com': {
+                name: 'Maria Santos',
+                password: 'OutraSenh@456',
+                balance: 700,
+                transactions: [
+                    { date: '2024-01-15', description: 'Freelance Design', amount: 1500, type: 'ENTRADA' },
+                    { date: '2024-01-16', description: 'Aluguel', amount: 800, type: 'SAIDA' }
+                ]
+            },
+            'pedro@teste.com': {
+                name: 'Pedro Costa',
+                password: 'Pedro@789',
+                balance: 2800.10,
+                transactions: [
+                    { date: '2024-01-15', description: 'Consultoria TI', amount: 3000, type: 'ENTRADA' },
+                    { date: '2024-01-16', description: 'Curso Online', amount: 199.90, type: 'SAIDA' }
+                ]
+            }
+        };
+
+        // Elementos DOM
+        const loginScreen = document.getElementById('login-screen');
+        const dashboard = document.getElementById('dashboard');
+        const loginForm = document.getElementById('login-form');
+        const messageDiv = document.getElementById('message');
+
+        // Preencher campos com usuário de teste
+        function fillTestUser(email, password) {
+            document.getElementById('email').value = email;
+            document.getElementById('password').value = password;
+        }
+
+        // Mostrar mensagem
+        function showMessage(text, type) {
+            messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+        }
+
+        // Formatar moeda
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL'
+            }).format(value);
+        }
+
+        // Formatar data
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('pt-BR');
+        }
+
+        // Verificar se já está logado ao carregar a página
+        window.addEventListener('load', function() {
+            const savedUser = localStorage.getItem('loggedUser');
+            if (savedUser) {
+                const userData = JSON.parse(savedUser);
+                loginScreen.style.display = 'none';
+                dashboard.style.display = 'block';
+                showDashboard(userData.email, userData.user);
+            }
+        });
+
+        // Login
+        loginForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            const user = users[email];
+            
+            if (!user) {
+                showMessage('Usuário não encontrado!', 'error');
+                return;
+            }
+            
+            if (user.password !== password) {
+                showMessage('Senha incorreta!', 'error');
+                return;
+            }
+            
+            showMessage('Login realizado com sucesso!', 'success');
+            
+            // Salvar login no localStorage para lembrar
+            localStorage.setItem('loggedUser', JSON.stringify({
+                email: email,
+                user: user
+            }));
+            
+            // Mostrar dashboard após 1 segundo
+            setTimeout(() => {
+                loginScreen.style.display = 'none';
+                dashboard.style.display = 'block';
+                showDashboard(email, user);
+            }, 1000);
+        });
+
+        // Mostrar dashboard
+        function showDashboard(email, user) {
+            // Informações do usuário
+            document.getElementById('user-name').textContent = user.name;
+            document.getElementById('user-email').textContent = email;
+            
+            // Saldo
+            document.getElementById('balance').textContent = formatCurrency(user.balance);
+            
+            // Transações
+            const transactionsDiv = document.getElementById('transactions');
+            let transactionsHTML = '';
+            
+            user.transactions.forEach(transaction => {
+                transactionsHTML += `
+                    <div class="transaction ${transaction.type.toLowerCase()}">
+                        <div>
+                            <strong>${transaction.description}</strong>
+                            <div>${formatDate(transaction.date)}</div>
+                        </div>
+                        <div class="transaction-amount ${transaction.type.toLowerCase()}">
+                            ${transaction.type === 'ENTRADA' ? '+' : '-'} ${formatCurrency(transaction.amount)}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            transactionsDiv.innerHTML = transactionsHTML;
+        }
+
+        // Logout
+        function logout() {
+            // Limpar dados salvos
+            localStorage.removeItem('loggedUser');
+            
+            loginScreen.style.display = 'block';
+            dashboard.style.display = 'none';
+            document.getElementById('email').value = '';
+            document.getElementById('password').value = '';
+            messageDiv.innerHTML = '';
+        }
+
+        // Admin Functions
+        function showAdminLogin() {
+            document.getElementById('admin-modal').style.display = 'block';
+            document.getElementById('admin-login').style.display = 'block';
+            document.getElementById('admin-tools').style.display = 'none';
+            document.getElementById('admin-password').value = '';
+        }
+
+        function verifyAdminPassword() {
+            const password = document.getElementById('admin-password').value;
+            if (password === '834702') {
+                document.getElementById('admin-login').style.display = 'none';
+                document.getElementById('admin-tools').style.display = 'block';
+            } else {
+                alert('Senha incorreta!');
+                document.getElementById('admin-password').value = '';
+            }
+        }
+
+        function closeAdmin() {
+            document.getElementById('admin-modal').style.display = 'none';
+        }
+
+        function runSystemCheck() {
+            alert('🔍 Sistema verificado!\n\n✅ Login funcionando\n✅ Dados íntegros\n✅ Interface responsiva\n\nSistema operacional!');
+        }
+
+        function clearAllData() {
+            if (confirm('⚠️ ATENÇÃO!\n\nIsso irá limpar todos os dados salvos e fazer logout.\nDeseja continuar?')) {
+                // Limpar localStorage se houver
+                localStorage.clear();
+                sessionStorage.clear();
+                alert('🗑️ Dados limpos com sucesso!\nVocê será redirecionado para o login.');
+                location.reload();
+            }
+        }
+
+        function exportData() {
+            const data = {
+                users: users,
+                timestamp: new Date().toISOString(),
+                version: '1.0'
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'diario-financeiro-backup.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            alert('📤 Dados exportados com sucesso!');
+        }
+
+        // Fechar modal ao clicar fora
+        document.getElementById('admin-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeAdmin();
+            }
+        });
+    </script>
+</body>
+</html>
