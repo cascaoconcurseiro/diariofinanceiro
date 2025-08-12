@@ -1,25 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
-import { Wifi, WifiOff, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, Check } from 'lucide-react';
 import { syncService } from '../services/syncService';
-import { realTimeSync } from '../utils/realTimeSync';
 
 const SyncStatus: React.FC = () => {
-  const [syncStatus, setSyncStatus] = useState<any>({});
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [lastSync, setLastSync] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
-    const updateStatus = () => {
-      const status = syncService.getSyncStatus();
-      setSyncStatus(status);
-      setLastSync(status.lastSync);
-    };
-
-    updateStatus();
-    const interval = setInterval(updateStatus, 5000);
-
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
@@ -27,7 +16,6 @@ const SyncStatus: React.FC = () => {
     window.addEventListener('offline', handleOffline);
 
     return () => {
-      clearInterval(interval);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
@@ -38,19 +26,10 @@ const SyncStatus: React.FC = () => {
     try {
       console.log('🔄 Forçando sincronização manual...');
       
-      // Buscar dados mais recentes
-      const serverData = await syncService.fetchTransactions();
       const localData = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
+      await syncService.syncAllTransactions(localData);
       
-      // Forçar sincronização
-      await syncService.syncTransactions(localData);
-      
-      // Atualizar status
-      const status = syncService.getSyncStatus();
-      setSyncStatus(status);
       setLastSync(Date.now());
-      
-      // Forçar atualização da interface
       window.dispatchEvent(new Event('storage'));
       
       console.log('✅ Sincronização manual concluída');
@@ -67,10 +46,9 @@ const SyncStatus: React.FC = () => {
     const now = Date.now();
     const diff = now - timestamp;
     
-    if (diff < 60000) return 'Agora mesmo';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}min atrás`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h atrás`;
-    return new Date(timestamp).toLocaleDateString();
+    if (diff < 60000) return 'Agora';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}min`;
+    return `${Math.floor(diff / 3600000)}h`;
   };
 
   const getSyncIcon = () => {
@@ -92,26 +70,20 @@ const SyncStatus: React.FC = () => {
       
       <span className="hidden sm:inline text-xs">
         {!isOnline ? 'Offline' : 
-         isSyncing ? 'Sincronizando...' :
-         `Último: ${formatLastSync(lastSync)}`}
+         isSyncing ? 'Sync...' :
+         `${formatLastSync(lastSync)}`}
       </span>
       
-      {syncStatus.userId && (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={handleForceSync}
-          disabled={isSyncing}
-          className="h-6 px-2 text-xs bg-blue-50 hover:bg-blue-100"
-          title="Sincronizar manualmente entre dispositivos"
-        >
-          {isSyncing ? '🔄 Sync...' : '🔄 Sync'}
-        </Button>
-      )}
-      
-      {realTimeSync.isConnected() && (
-        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Real-time ativo" />
-      )}
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={handleForceSync}
+        disabled={isSyncing}
+        className="h-6 px-2 text-xs bg-blue-50 hover:bg-blue-100"
+        title="Sincronizar"
+      >
+        🔄
+      </Button>
     </div>
   );
 };
