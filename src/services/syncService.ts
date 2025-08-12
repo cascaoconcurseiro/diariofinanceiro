@@ -1,51 +1,52 @@
 /**
- * SINCRONIZAÇÃO AUTOMÁTICA ENTRE DISPOSITIVOS
- * Usando WebSocket simulado + Polling para sincronização real
+ * SINCRONIZAÇÃO REAL COM NEON.TECH
+ * Banco PostgreSQL na nuvem com sync instantâneo
  */
 
-import { databaseService } from './databaseService';
+import { neonDB } from './neonDatabase';
 
 class SyncService {
   private userId: string | null = null;
   private syncInterval: number | null = null;
   private listeners: ((transactions: any[]) => void)[] = [];
+  private lastSync: Date | null = null;
 
   async init() {
-    await databaseService.init();
-    console.log('🔄 Sync service initialized');
+    await neonDB.init();
+    console.log('🔄 Sync service with Neon initialized');
   }
 
   setUserId(userId: string) {
     this.userId = userId;
-    this.startAutoSync();
+    this.startRealTimeSync();
   }
 
-  private startAutoSync() {
+  private startRealTimeSync() {
     if (this.syncInterval) clearInterval(this.syncInterval);
     
-    // Sincronizar a cada 2 segundos
+    // Sincronização ultra-rápida a cada 1 segundo
     this.syncInterval = window.setInterval(async () => {
       await this.checkForUpdates();
-    }, 2000);
+    }, 1000);
   }
 
   private async checkForUpdates() {
     if (!this.userId) return;
 
     try {
-      const dbTransactions = await databaseService.getUserTransactions(this.userId);
-      const localTransactions = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
+      const lastUpdate = await neonDB.getLastUpdate(this.userId);
       
-      // Verificar se há diferenças
-      if (dbTransactions.length !== localTransactions.length) {
-        console.log('🔄 Syncing data between devices...');
-        localStorage.setItem('unifiedFinancialData', JSON.stringify(dbTransactions));
+      if (!this.lastSync || (lastUpdate && new Date(lastUpdate) > this.lastSync)) {
+        console.log('🔄 Syncing from Neon...');
         
-        // Notificar listeners
-        this.listeners.forEach(listener => listener(dbTransactions));
+        const transactions = await neonDB.getUserTransactions(this.userId);
+        localStorage.setItem('unifiedFinancialData', JSON.stringify(transactions));
+        
+        this.listeners.forEach(listener => listener(transactions));
+        this.lastSync = new Date();
       }
     } catch (error) {
-      console.error('Sync error:', error);
+      console.error('Sync check error:', error);
     }
   }
 
@@ -53,18 +54,17 @@ class SyncService {
     if (!this.userId) return false;
 
     try {
-      // Salvar no banco
-      await databaseService.addTransaction(this.userId, transaction);
+      const success = await neonDB.addTransaction(this.userId, transaction);
       
-      // Atualizar localStorage
-      const allTransactions = await databaseService.getUserTransactions(this.userId);
-      localStorage.setItem('unifiedFinancialData', JSON.stringify(allTransactions));
+      if (success) {
+        // Atualizar cache local
+        const allTransactions = await neonDB.getUserTransactions(this.userId);
+        localStorage.setItem('unifiedFinancialData', JSON.stringify(allTransactions));
+        this.notifyListeners(allTransactions);
+        this.lastSync = new Date();
+      }
       
-      // Notificar outros dispositivos
-      this.notifyListeners(allTransactions);
-      
-      console.log('✅ Transaction synced across devices');
-      return true;
+      return success;
     } catch (error) {
       console.error('Add transaction error:', error);
       return false;
@@ -75,31 +75,18 @@ class SyncService {
     if (!this.userId) return false;
 
     try {
-      await databaseService.deleteTransaction(this.userId, transactionId);
+      const success = await neonDB.deleteTransaction(this.userId, transactionId);
       
-      const allTransactions = await databaseService.getUserTransactions(this.userId);
-      localStorage.setItem('unifiedFinancialData', JSON.stringify(allTransactions));
+      if (success) {
+        const allTransactions = await neonDB.getUserTransactions(this.userId);
+        localStorage.setItem('unifiedFinancialData', JSON.stringify(allTransactions));
+        this.notifyListeners(allTransactions);
+        this.lastSync = new Date();
+      }
       
-      this.notifyListeners(allTransactions);
-      
-      console.log('✅ Transaction deleted and synced');
-      return true;
+      return success;
     } catch (error) {
       console.error('Delete transaction error:', error);
-      return false;
-    }
-  }
-
-  async syncAllTransactions(transactions: any[]): Promise<boolean> {
-    if (!this.userId) return false;
-
-    try {
-      await databaseService.saveUserTransactions(this.userId, transactions);
-      localStorage.setItem('unifiedFinancialData', JSON.stringify(transactions));
-      this.notifyListeners(transactions);
-      return true;
-    } catch (error) {
-      console.error('Sync all error:', error);
       return false;
     }
   }
@@ -108,12 +95,32 @@ class SyncService {
     if (!this.userId) return [];
     
     try {
-      const transactions = await databaseService.getUserTransactions(this.userId);
+      const transactions = await neonDB.getUserTransactions(this.userId);
       localStorage.setItem('unifiedFinancialData', JSON.stringify(transactions));
+      this.lastSync = new Date();
       return transactions;
     } catch (error) {
       console.error('Load transactions error:', error);
       return [];
+    }
+  }
+
+  async syncAllTransactions(transactions: any[]): Promise<boolean> {
+    if (!this.userId) return false;
+
+    try {
+      const success = await neonDB.syncUserTransactions(this.userId, transactions);
+      
+      if (success) {
+        localStorage.setItem('unifiedFinancialData', JSON.stringify(transactions));
+        this.notifyListeners(transactions);
+        this.lastSync = new Date();
+      }
+      
+      return success;
+    } catch (error) {
+      console.error('Sync all error:', error);
+      return false;
     }
   }
 
