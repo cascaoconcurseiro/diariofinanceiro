@@ -1,151 +1,77 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TransactionEntry } from '../types/transactions';
 import { formatCurrency, parseCurrency } from '../utils/currencyUtils';
-import { syncService } from '../services/syncService';
+import { firebaseSync } from '../services/firebaseSync';
 import { useAuth } from '../contexts/AuthContext';
 import { sanitizeInput, sanitizeAmount } from '../utils/security';
 import { backupSystem } from '../utils/backup';
-import { realTimeSync } from '../utils/realTimeSync';
 
-/**
- * SISTEMA FINANCEIRO SIMPLIFICADO
- * Apenas o essencial, sem over-engineering
- */
 export const useUnifiedFinancialSystem = () => {
   const { user, token } = useAuth();
   const [transactions, setTransactions] = useState<TransactionEntry[]>([]);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
-  
-  // ✅ Sempre abrir no mês atual
+  const [isSyncing, setIsSyncing] = useState(false);
+
   useEffect(() => {
     const now = new Date();
     setSelectedYear(now.getFullYear());
     setSelectedMonth(now.getMonth());
   }, []);
-  const [isSyncing, setIsSyncing] = useState(false);
 
-  // Carregar dados (local + sincronização)
+  // Inicializar Firebase e carregar dados
   useEffect(() => {
-    const loadData = async () => {
+    const initFirebase = async () => {
       if (user && token) {
-        // ✅ CONFIGURAR SINCRONIZAÇÃO REAL-TIME
-        realTimeSync.setUserId(user.id);
-        
-        // Usuário logado: buscar do servidor
         setIsSyncing(true);
-        const serverTransactions = await syncService.fetchTransactions();
-        if (serverTransactions.length > 0) {
-          setTransactions(serverTransactions);
-          // Salvar localmente como backup
-          localStorage.setItem('unifiedFinancialData', JSON.stringify(serverTransactions));
-        } else {
-          // Se servidor vazio, tentar carregar local e sincronizar
+        
+        const initialized = await firebaseSync.init();
+        if (initialized) {
+          firebaseSync.setUserId(user.id);
+          
+          firebaseSync.onDataChange((data) => {
+            console.log('🔥 Firebase data updated');
+            setTransactions(data);
+          });
+          
           const saved = localStorage.getItem('unifiedFinancialData');
           if (saved) {
             const localTransactions = JSON.parse(saved);
             if (Array.isArray(localTransactions) && localTransactions.length > 0) {
-              await syncService.syncTransactions(localTransactions);
-              setTransactions(localTransactions);
+              await firebaseSync.syncTransactions(localTransactions);
             }
           }
         }
+        
         setIsSyncing(false);
       } else {
-        // Usuário não logado: usar apenas local
-        try {
-          const saved = localStorage.getItem('unifiedFinancialData');
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed)) {
-              setTransactions(parsed);
-            }
-          }
-        } catch (error) {
-          console.error('Erro ao carregar dados:', error);
-          setTransactions([]);
-        }
-      }
-    };
-
-    loadData();
-    
-    // ✅ ESCUTAR ATUALIZAÇÕES DA NUVEM
-    const handleCloudUpdate = (event: CustomEvent) => {
-      console.log('☁️ Dados atualizados na nuvem, recarregando...');
-      setTransactions(event.detail.data);
-    };
-    
-    window.addEventListener('cloudDataUpdated', handleCloudUpdate as EventListener);
-    
-    return () => {
-      window.removeEventListener('cloudDataUpdated', handleCloudUpdate as EventListener);
-    };
-  }, [user, token]);
-
-  // ✅ ESCUTAR SINCRONIZAÇÃO REAL-TIME E STORAGE
-  useEffect(() => {
-    const handleRealTimeSync = (data: any) => {
-      if (data.type === 'transaction') {
-        if (data.action === 'add') {
-          setTransactions(prev => {
-            // Evitar duplicatas
-            const exists = prev.find(t => t.id === data.data.id);
-            if (exists) return prev;
-            return [...prev, data.data];
-          });
-        } else if (data.action === 'delete') {
-          setTransactions(prev => prev.filter(t => t.id !== data.data.id));
-        }
-      } else if (data.type === 'full_sync') {
-        setTransactions(data.data);
-        localStorage.setItem('unifiedFinancialData', JSON.stringify(data.data));
-      }
-    };
-
-    // Escutar mudanças no localStorage (para exclusões de recorrentes)
-    const handleStorageChange = () => {
-      console.log('🔄 Storage changed, reloading transactions...');
-      const saved = localStorage.getItem('unifiedFinancialData');
-      if (saved) {
-        try {
+        const saved = localStorage.getItem('unifiedFinancialData');
+        if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed)) {
             setTransactions(parsed);
-            console.log('✅ Transactions reloaded:', parsed.length);
           }
-        } catch (error) {
-          console.error('Erro ao recarregar transações:', error);
         }
       }
     };
 
-    realTimeSync.onSync(handleRealTimeSync);
-    window.addEventListener('storage', handleStorageChange);
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
+    initFirebase();
+  }, [user, token]);
 
-  // Salvar dados no localStorage com backup
   useEffect(() => {
     if (transactions.length >= 0) {
       localStorage.setItem('unifiedFinancialData', JSON.stringify(transactions));
       
-      // ✅ Backup automático a cada 10 transações
       if (transactions.length > 0 && transactions.length % 10 === 0) {
         backupSystem.createBackup(transactions);
       }
     }
   }, [transactions]);
 
-  // Gerar ID único
   const generateId = useCallback((): string => {
     return `txn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }, []);
 
-  // Adicionar transação
   const addTransaction = useCallback((
     date: string,
     description: string,
@@ -157,7 +83,6 @@ export const useUnifiedFinancialSystem = () => {
     source: 'manual' | 'recurring' | 'quick-entry' = 'manual'
   ): string => {
     
-    // ✅ Prevenir duplicatas para transações recorrentes
     if (isRecurring && recurringId) {
       const existing = transactions.find(t => 
         t.recurringId === recurringId && 
@@ -172,15 +97,14 @@ export const useUnifiedFinancialSystem = () => {
       }
     }
     
-    // ✅ Para recorrentes, verificar se é data futura
     if (isRecurring) {
       const targetDate = new Date(date);
       const today = new Date();
-      today.setHours(0, 0, 0, 0); // Zerar horas para comparação apenas de data
+      today.setHours(0, 0, 0, 0);
       
       if (targetDate < today) {
         console.log(`⏭️ Skipping past recurring date: ${sanitizeInput(date)}`);
-        return ''; // Não criar transação para data passada
+        return '';
       }
     }
 
@@ -201,54 +125,37 @@ export const useUnifiedFinancialSystem = () => {
       updatedAt: now
     };
 
-    // ✅ ATUALIZAR ESTADO IMEDIATAMENTE
     setTransactions(prev => {
       const updated = [...prev, newTransaction];
-      // Salvar no localStorage imediatamente
       localStorage.setItem('unifiedFinancialData', JSON.stringify(updated));
+      
+      if (user && token) {
+        firebaseSync.addTransaction(newTransaction);
+      }
+      
       return updated;
     });
     
-    // ✅ SINCRONIZAÇÃO REAL-TIME
-    realTimeSync.syncTransaction('add', newTransaction);
-    
-    // ✅ SINCRONIZAÇÃO COM NUVEM (NÃO BLOQUEAR UI)
-    if (user && token) {
-      syncService.createTransaction(newTransaction).catch(console.error);
-    }
-    
-    // ✅ DISPARAR EVENTO PARA ATUALIZAR OUTRAS ABAS
-    window.dispatchEvent(new Event('storage'));
-    
     return id;
-  }, [transactions, generateId]);
+  }, [transactions, generateId, user, token]);
 
-  // Deletar transação
   const deleteTransaction = useCallback((id: string): boolean => {
     let deleted = false;
     
     setTransactions(prev => {
       const filtered = prev.filter(t => t.id !== id);
       deleted = filtered.length !== prev.length;
+      
+      if (deleted && user && token) {
+        firebaseSync.syncTransactions(filtered);
+      }
+      
       return filtered;
     });
-    
-    // ✅ SINCRONIZAÇÃO REAL-TIME
-    if (deleted) {
-      realTimeSync.syncTransaction('delete', { id });
-      // Forçar atualização da interface
-      window.dispatchEvent(new Event('storage'));
-    }
-    
-    // Sincronizar com servidor se logado
-    if (deleted && user && token && syncService.isOnline()) {
-      syncService.deleteTransaction(id).catch(console.error);
-    }
 
     return deleted;
-  }, []);
+  }, [user, token]);
 
-  // Deletar apenas instância específica de recorrente
   const deleteRecurringInstance = useCallback((transactionId: string): boolean => {
     let deleted = false;
     
@@ -261,7 +168,6 @@ export const useUnifiedFinancialSystem = () => {
     return deleted;
   }, []);
   
-  // Deletar todas as transações de um recorrente
   const deleteAllRecurringTransactions = useCallback((recurringId: string): number => {
     let deletedCount = 0;
     
@@ -274,7 +180,6 @@ export const useUnifiedFinancialSystem = () => {
     return deletedCount;
   }, []);
 
-  // Atualizar dados do dia
   const updateDayData = useCallback((
     year: number, 
     month: number, 
@@ -285,7 +190,6 @@ export const useUnifiedFinancialSystem = () => {
     const amount = parseCurrency(value);
     const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
-    // Remover transações manuais existentes para este dia/campo
     const existing = transactions.filter(t => 
       t.date === date && t.type === field && t.source === 'manual'
     );
@@ -294,7 +198,6 @@ export const useUnifiedFinancialSystem = () => {
       deleteTransaction(transaction.id);
     });
     
-    // Adicionar nova transação se valor > 0
     if (amount > 0) {
       addTransaction(
         date, 
@@ -309,7 +212,6 @@ export const useUnifiedFinancialSystem = () => {
     }
   }, [transactions, addTransaction, deleteTransaction]);
 
-  // ✅ Obter transações por data (otimizado)
   const transactionsByDate = useMemo(() => {
     const map = new Map<string, TransactionEntry[]>();
     transactions.forEach(t => {
@@ -323,13 +225,11 @@ export const useUnifiedFinancialSystem = () => {
     return transactionsByDate.get(date) || [];
   }, [transactionsByDate]);
 
-  // ✅ Cache para totais mensais
   const monthlyTotalsCache = useMemo(() => {
     const cache = new Map<string, any>();
     return cache;
   }, [transactions]);
 
-  // Calcular totais mensais (com cache)
   const getMonthlyTotals = useCallback((year: number, month: number) => {
     const cacheKey = `${year}-${month}`;
     if (monthlyTotalsCache.has(cacheKey)) {
@@ -358,7 +258,6 @@ export const useUnifiedFinancialSystem = () => {
       }
     });
 
-    // Calcular saldo acumulado até este mês
     const allTransactionsUpToMonth = transactions.filter(t => {
       const [tYear, tMonth] = t.date.split('-').map(Number);
       return tYear < year || (tYear === year && tMonth <= month + 1);
@@ -384,11 +283,9 @@ export const useUnifiedFinancialSystem = () => {
     return result;
   }, [transactions, monthlyTotalsCache]);
 
-  // Estrutura de dados para exibição
   const data = useMemo(() => {
     const result: any = {};
     
-    // Anos com transações + ano atual + ano selecionado
     const yearsWithTransactions = [...new Set(
       transactions.map(t => parseInt(t.date.split('-')[0]))
     )];
@@ -428,7 +325,6 @@ export const useUnifiedFinancialSystem = () => {
             }
           });
           
-          // Saldo acumulado até este dia
           const allTransactionsUpToDay = transactions.filter(t => t.date <= date);
           let balance = 0;
           allTransactionsUpToDay.forEach(t => {
@@ -459,34 +355,25 @@ export const useUnifiedFinancialSystem = () => {
   }, [transactions, selectedYear, getTransactionsByDate]);
 
   return {
-    // Estado
     transactions,
     selectedYear,
     selectedMonth,
     setSelectedYear,
     setSelectedMonth,
     data,
-    
-    // Funções principais
     addTransaction,
     deleteTransaction,
     deleteRecurringInstance,
     deleteAllRecurringTransactions,
     updateDayData,
-    
-    // Funções de consulta
     getTransactionsByDate,
     getMonthlyTotals,
-    
-    // Utilitários
     formatCurrency,
-    
-    // Sincronização
     isSyncing,
     syncWithServer: async () => {
       if (user && token) {
         setIsSyncing(true);
-        const success = await syncService.syncTransactions(transactions);
+        const success = await firebaseSync.syncTransactions(transactions);
         setIsSyncing(false);
         return success;
       }
