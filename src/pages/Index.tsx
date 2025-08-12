@@ -90,34 +90,42 @@ const Index = () => {
     setInputValues({});
   }, [selectedYear, selectedMonth]);
 
-  // Process recurring transactions when month changes - ONLY on mount and month change
+  // Process recurring transactions when month changes - SAFE VERSION
   useEffect(() => {
-    const activeTransactions = getActiveRecurringTransactions();
-    if (activeTransactions.length > 0) {
-      processRecurringTransactions(
-        activeTransactions,
-        selectedYear,
-        selectedMonth,
-        (year, month, day, type, amount) => {
-          const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-          const recurringTransaction = activeTransactions.find(t => t.type === type && t.amount === amount);
-          const description = recurringTransaction?.description || `${getFieldLabel(type)} Recorrente - ${formatCurrency(amount)}`;
-          
-          addTransaction(
-            dateString,
-            description,
-            amount,
-            type,
-            undefined,
-            true,
-            recurringTransaction?.id,
-            'recurring'
-          );
-        },
-        updateRecurringTransaction
-      );
+    try {
+      const activeTransactions = getActiveRecurringTransactions();
+      if (activeTransactions && activeTransactions.length > 0) {
+        processRecurringTransactions(
+          activeTransactions,
+          selectedYear,
+          selectedMonth,
+          (year, month, day, type, amount) => {
+            try {
+              const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+              const recurringTransaction = activeTransactions.find(t => t.type === type && t.amount === amount);
+              const description = recurringTransaction?.description || `${getFieldLabel(type)} Recorrente - ${formatCurrency(amount)}`;
+              
+              addTransaction(
+                dateString,
+                description,
+                amount,
+                type,
+                undefined,
+                true,
+                recurringTransaction?.id,
+                'recurring'
+              );
+            } catch (error) {
+              console.error('Error processing recurring transaction:', error);
+            }
+          },
+          updateRecurringTransaction
+        );
+      }
+    } catch (error) {
+      console.error('Error in recurring transactions effect:', error);
     }
-  }, [selectedYear, selectedMonth]); // REMOVIDO dependências que causam reprocessamento
+  }, [selectedYear, selectedMonth]);
 
   useEffect(() => {
     document.title = 'Diário Financeiro - Alertas Inteligentes';
