@@ -260,6 +260,16 @@ const AdminPanel: React.FC = () => {
                 >
                   ☁️ Debug Sync
                 </Button>
+                <Button 
+                  onClick={async () => {
+                    const { neonDB } = await import('../services/neonDatabase');
+                    await neonDB.recreateTestUsers();
+                    alert('Usuários de teste recriados!');
+                  }}
+                  className="w-full bg-red-600 hover:bg-red-700 text-sm"
+                >
+                  👥 Recriar Usuários Teste
+                </Button>
               </div>
             </CardContent>
           </Card>

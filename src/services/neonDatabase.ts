@@ -34,6 +34,7 @@ class NeonDatabase {
           name TEXT NOT NULL,
           email TEXT UNIQUE NOT NULL,
           password_hash TEXT NOT NULL,
+          is_blocked BOOLEAN DEFAULT FALSE,
           created_at TIMESTAMP DEFAULT NOW(),
           updated_at TIMESTAMP DEFAULT NOW()
         )
@@ -316,19 +317,26 @@ class NeonDatabase {
     for (const user of testUsers) {
       try {
         const hashedPassword = this.hashPassword(user.password);
-        console.log(`👤 Criando usuário teste: ${user.name}`);
+        console.log(`👤 Criando usuário teste: ${user.name} (Hash: ${hashedPassword})`);
         
         // Deletar se existir e recriar com novo hash
         await this.sql`DELETE FROM users WHERE email = ${user.email}`;
         
         await this.sql`
-          INSERT INTO users (id, name, email, password_hash)
-          VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword})
+          INSERT INTO users (id, name, email, password_hash, is_blocked)
+          VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword}, FALSE)
         `;
       } catch (error) {
         console.error(`Error creating user ${user.email}:`, error);
       }
     }
+  }
+
+  // Forçar recriação de usuários de teste (para debug)
+  async recreateTestUsers() {
+    console.log('🔄 Forçando recriação de usuários de teste...');
+    await this.createTestUsers();
+    console.log('✅ Usuários de teste recriados com sucesso!');
   }
 
   // Criar novo usuário
@@ -395,7 +403,7 @@ class NeonDatabase {
       
       // Primeiro verificar se o usuário existe
       const userCheck = await this.sql`
-        SELECT id, name, email, password_hash
+        SELECT id, name, email, password_hash, is_blocked
         FROM users 
         WHERE email = ${email}
       `;
@@ -410,6 +418,15 @@ class NeonDatabase {
       
       const user = userCheck[0];
       console.log('👤 Usuário encontrado:', user.name);
+      
+      // Verificar se usuário está bloqueado
+      if (user.is_blocked) {
+        console.log('❌ Usuário bloqueado');
+        return {
+          success: false,
+          error: 'Usuário bloqueado. Contate o administrador.'
+        };
+      }
       
       if (this.timingSafeEqual(user.password_hash, hashedPassword)) {
         console.log('✅ Login realizado com sucesso');
@@ -509,6 +526,89 @@ class NeonDatabase {
       return true;
     } catch (error) {
       console.error('Delete recurring error:', error);
+      return false;
+    }
+  }
+
+  // GERENCIAMENTO DE USUÁRIOS
+  async getAllUsers() {
+    await this.init();
+    try {
+      const result = await this.sql`
+        SELECT id, name, email, is_blocked, created_at
+        FROM users 
+        ORDER BY created_at DESC
+      `;
+      return result;
+    } catch (error) {
+      console.error('Get all users error:', error);
+      return [];
+    }
+  }
+
+  async updateUserPassword(userId: string, newPassword: string): Promise<boolean> {
+    await this.init();
+    try {
+      const hashedPassword = this.hashPassword(newPassword);
+      await this.sql`
+        UPDATE users 
+        SET password_hash = ${hashedPassword}, updated_at = NOW()
+        WHERE id = ${userId}
+      `;
+      console.log('✅ Senha atualizada para usuário:', userId);
+      return true;
+    } catch (error) {
+      console.error('Update password error:', error);
+      return false;
+    }
+  }
+
+  async blockUser(userId: string, blocked: boolean): Promise<boolean> {
+    await this.init();
+    try {
+      await this.sql`
+        UPDATE users 
+        SET is_blocked = ${blocked}, updated_at = NOW()
+        WHERE id = ${userId}
+      `;
+      console.log(`✅ Usuário ${blocked ? 'bloqueado' : 'desbloqueado'}:`, userId);
+      return true;
+    } catch (error) {
+      console.error('Block user error:', error);
+      return false;
+    }
+  }
+
+  async deleteUser(userId: string): Promise<boolean> {
+    await this.init();
+    try {
+      // Deletar transações do usuário
+      await this.sql`DELETE FROM user_transactions WHERE user_id = ${userId}`;
+      // Deletar transações recorrentes do usuário
+      await this.sql`DELETE FROM recurring_transactions WHERE user_id = ${userId}`;
+      // Deletar configurações do usuário
+      await this.sql`DELETE FROM user_settings WHERE user_id = ${userId}`;
+      // Deletar usuário
+      await this.sql`DELETE FROM users WHERE id = ${userId}`;
+      
+      console.log('✅ Usuário excluído:', userId);
+      return true;
+    } catch (error) {
+      console.error('Delete user error:', error);
+      return false;
+    }
+  }
+
+  // Verificar se usuário está bloqueado
+  async isUserBlocked(email: string): Promise<boolean> {
+    await this.init();
+    try {
+      const result = await this.sql`
+        SELECT is_blocked FROM users WHERE email = ${email}
+      `;
+      return result.length > 0 && result[0].is_blocked;
+    } catch (error) {
+      console.error('Check user blocked error:', error);
       return false;
     }
   }
