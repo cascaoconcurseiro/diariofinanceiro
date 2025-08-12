@@ -34,11 +34,17 @@ class NeonDatabase {
           name TEXT NOT NULL,
           email TEXT UNIQUE NOT NULL,
           password_hash TEXT NOT NULL,
-          is_blocked BOOLEAN DEFAULT FALSE,
           created_at TIMESTAMP DEFAULT NOW(),
           updated_at TIMESTAMP DEFAULT NOW()
         )
       `;
+      
+      // Adicionar coluna is_blocked se não existir
+      try {
+        await this.sql`ALTER TABLE users ADD COLUMN is_blocked BOOLEAN DEFAULT FALSE`;
+      } catch (error) {
+        // Coluna já existe, ignorar erro
+      }
       
       // Criar tabela de transações se não existir
       await this.sql`
