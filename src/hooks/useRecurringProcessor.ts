@@ -21,15 +21,31 @@ export const useRecurringProcessor = () => {
       return;
     }
     
+    // Verificar se existem transações já criadas para este mês
+    const existingTransactions = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
+    const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+    
     activeTransactions.forEach(transaction => {
       const { dayOfMonth, type, amount, frequency, remainingCount, remainingMonths, id } = transaction;
       
       // Ajustar dia para meses com menos dias
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       const targetDay = Math.min(dayOfMonth, daysInMonth);
+      const targetDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
+      
+      // Verificar se já existe transação para esta data e recorrente
+      const alreadyExists = existingTransactions.some(t => 
+        t.recurringId === id && 
+        t.date === targetDate &&
+        t.type === type &&
+        Math.abs(t.amount - amount) < 0.01
+      );
+      
+      if (alreadyExists) {
+        return; // Pular se já existe
+      }
       
       // Só processar se for mês atual ou futuro
-      const targetDate = new Date(year, month, targetDay);
       const isCurrentOrFuture = year > currentYear || (year === currentYear && month >= currentMonth);
       
       if (isCurrentOrFuture) {

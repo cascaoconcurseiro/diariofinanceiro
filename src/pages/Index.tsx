@@ -90,7 +90,7 @@ const Index = () => {
     setInputValues({});
   }, [selectedYear, selectedMonth]);
 
-  // Process recurring transactions when month changes
+  // Process recurring transactions when month changes - ONLY on mount and month change
   useEffect(() => {
     const activeTransactions = getActiveRecurringTransactions();
     if (activeTransactions.length > 0) {
@@ -117,7 +117,7 @@ const Index = () => {
         updateRecurringTransaction
       );
     }
-  }, [selectedYear, selectedMonth, processRecurringTransactions, addTransaction, updateRecurringTransaction, getActiveRecurringTransactions, formatCurrency, getFieldLabel]);
+  }, [selectedYear, selectedMonth]); // REMOVIDO dependências que causam reprocessamento
 
   useEffect(() => {
     document.title = 'Diário Financeiro - Alertas Inteligentes';
