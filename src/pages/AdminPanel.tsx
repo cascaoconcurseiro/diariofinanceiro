@@ -295,6 +295,28 @@ const AdminPanel: React.FC = () => {
                 >
                   🚨 RESET COMPLETO
                 </Button>
+                <Button 
+                  onClick={async () => {
+                    const { neonDB } = await import('../services/neonDatabase');
+                    console.log('=== DEBUG AUTH ===');
+                    
+                    // Testar hash
+                    const hash = neonDB.testPasswordHash('123456');
+                    
+                    // Testar login
+                    const loginResult = await neonDB.authenticateUser('wesley@teste.com', '123456');
+                    console.log('Login result:', loginResult);
+                    
+                    // Testar criação
+                    const createResult = await neonDB.createUser('debug@teste.com', '123456', 'Debug User');
+                    console.log('Create result:', createResult);
+                    
+                    alert('Debug executado! Verifique o console.');
+                  }}
+                  className="w-full bg-orange-600 hover:bg-orange-700 text-sm"
+                >
+                  🔍 DEBUG AUTH
+                </Button>
               </div>
             </CardContent>
           </Card>

@@ -276,19 +276,14 @@ class NeonDatabase {
     }
   }
 
-  // Hash de senha SIMPLES e DETERMINÍSTICO
+  // Hash ULTRA SIMPLES - apenas para funcionar
   private hashPassword(password: string): string {
-    // Algoritmo simples mas determinístico
+    // Hash mais simples possível
     let hash = 0;
-    const str = password + 'SALT2024';
-    
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
+    for (let i = 0; i < password.length; i++) {
+      hash += password.charCodeAt(i) * (i + 1);
     }
-    
-    return Math.abs(hash).toString(16).padStart(8, '0');
+    return hash.toString();
   }
 
   // Comparação time-safe para senhas
@@ -380,51 +375,35 @@ class NeonDatabase {
     return hash1;
   }
 
-  // Criar novo usuário - VERSÃO CORRIGIDA
+  // Criar usuário ULTRA SIMPLES
   async createUser(email: string, password: string, name: string): Promise<CreateUserResult> {
     await this.init();
     
     try {
       const cleanEmail = email.toLowerCase().trim();
-      const cleanName = name.trim();
       
-      // Verificar se email já existe - QUERY SIMPLES
-      const existing = await this.sql`
-        SELECT COUNT(*) as count FROM users WHERE LOWER(email) = ${cleanEmail}
-      `;
+      // Verificar duplicata de forma mais direta
+      const existing = await this.sql`SELECT email FROM users WHERE email = ${cleanEmail}`;
       
-      if (existing[0].count > 0) {
-        console.log('❌ Email já existe:', cleanEmail);
-        return {
-          success: false,
-          error: 'Email já cadastrado'
-        };
+      if (existing.length > 0) {
+        return { success: false, error: 'Email já cadastrado' };
       }
       
-      // Criar novo usuário
       const userId = `user_${Date.now()}`;
       const hashedPassword = this.hashPassword(password);
       
       await this.sql`
         INSERT INTO users (id, name, email, password_hash, is_blocked)
-        VALUES (${userId}, ${cleanName}, ${cleanEmail}, ${hashedPassword}, FALSE)
+        VALUES (${userId}, ${name}, ${cleanEmail}, ${hashedPassword}, false)
       `;
       
-      console.log('✅ Usuário criado:', cleanName);
       return {
         success: true,
-        user: {
-          id: userId,
-          name: cleanName,
-          email: cleanEmail
-        }
+        user: { id: userId, name: name, email: cleanEmail }
       };
     } catch (error) {
-      console.error('Erro ao criar usuário:', error);
-      return {
-        success: false,
-        error: 'Erro interno'
-      };
+      console.error('Erro criar usuário:', error);
+      return { success: false, error: 'Erro interno' };
     }
   }
 
@@ -436,45 +415,30 @@ class NeonDatabase {
       const hashedPassword = this.hashPassword(password);
       const cleanEmail = email.toLowerCase().trim();
       
-      // Buscar usuário
+      // Buscar usuário de forma simples
       const users = await this.sql`
         SELECT id, name, email, password_hash, is_blocked
         FROM users 
-        WHERE LOWER(email) = ${cleanEmail}
+        WHERE email = ${cleanEmail}
       `;
       
       if (users.length === 0) {
-        return {
-          success: false,
-          error: 'Email não cadastrado'
-        };
+        return { success: false, error: 'Email não cadastrado' };
       }
       
       const user = users[0];
       
-      // Verificar se bloqueado
       if (user.is_blocked) {
-        return {
-          success: false,
-          error: 'Usuário bloqueado'
-        };
+        return { success: false, error: 'Usuário bloqueado' };
       }
       
-      // Verificar senha
       if (user.password_hash === hashedPassword) {
         return {
           success: true,
-          user: {
-            id: user.id,
-            name: user.name,
-            email: user.email
-          }
+          user: { id: user.id, name: user.name, email: user.email }
         };
       } else {
-        return {
-          success: false,
-          error: 'Senha incorreta'
-        };
+        return { success: false, error: 'Senha incorreta' };
       }
     } catch (error) {
       console.error('Authentication error:', error);
