@@ -22,31 +22,50 @@ export const useUnifiedFinancialSystem = () => {
   // Inicializar sistema e carregar dados do usuário
   useEffect(() => {
     const initSystem = async () => {
-      if (user && token) {
-        setIsSyncing(true);
-        
-        // Inicializar serviços
-        await syncService.init();
-        syncService.setUserId(user.id);
-        
-        // Carregar transações do usuário
-        const userTransactions = await syncService.loadUserTransactions();
-        setTransactions(userTransactions);
-        
-        // Escutar mudanças em tempo real
-        syncService.onDataChange((updatedTransactions) => {
-          console.log('🔄 Real-time update received');
-          setTransactions(updatedTransactions);
-        });
-        
+      try {
+        if (user && token) {
+          setIsSyncing(true);
+          
+          // Inicializar serviços
+          await syncService.init();
+          syncService.setUserId(user.id);
+          
+          // Carregar transações do usuário
+          const userTransactions = await syncService.loadUserTransactions();
+          setTransactions(userTransactions);
+          
+          // Escutar mudanças em tempo real
+          syncService.onDataChange((updatedTransactions) => {
+            console.log('🔄 Real-time update received');
+            setTransactions(updatedTransactions);
+          });
+          
+          setIsSyncing(false);
+        } else {
+          // Usuário não logado - usar localStorage
+          const saved = localStorage.getItem('unifiedFinancialData');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+              setTransactions(parsed);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('System init error:', error);
         setIsSyncing(false);
-      } else {
-        // Usuário não logado - usar localStorage
+        
+        // Fallback para localStorage
         const saved = localStorage.getItem('unifiedFinancialData');
         if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            setTransactions(parsed);
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+              setTransactions(parsed);
+            }
+          } catch (parseError) {
+            console.error('Parse error:', parseError);
+            setTransactions([]);
           }
         }
       }

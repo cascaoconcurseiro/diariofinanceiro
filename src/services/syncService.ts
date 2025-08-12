@@ -12,8 +12,16 @@ class SyncService {
   private lastSync: Date | null = null;
 
   async init() {
-    await neonDB.init();
-    console.log('🔄 Sync service with Neon initialized');
+    try {
+      const connected = await neonDB.init();
+      if (connected) {
+        console.log('🔄 Sync service with Neon initialized');
+      } else {
+        console.warn('⚠️ Neon connection failed, using localStorage fallback');
+      }
+    } catch (error) {
+      console.error('Sync init error:', error);
+    }
   }
 
   setUserId(userId: string) {
@@ -57,17 +65,28 @@ class SyncService {
       const success = await neonDB.addTransaction(this.userId, transaction);
       
       if (success) {
-        // Atualizar cache local
         const allTransactions = await neonDB.getUserTransactions(this.userId);
         localStorage.setItem('unifiedFinancialData', JSON.stringify(allTransactions));
         this.notifyListeners(allTransactions);
         this.lastSync = new Date();
+        return true;
+      } else {
+        // Fallback para localStorage
+        console.warn('⚠️ Using localStorage fallback');
+        const current = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
+        const updated = [...current, transaction];
+        localStorage.setItem('unifiedFinancialData', JSON.stringify(updated));
+        this.notifyListeners(updated);
+        return true;
       }
-      
-      return success;
     } catch (error) {
       console.error('Add transaction error:', error);
-      return false;
+      // Fallback para localStorage
+      const current = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
+      const updated = [...current, transaction];
+      localStorage.setItem('unifiedFinancialData', JSON.stringify(updated));
+      this.notifyListeners(updated);
+      return true;
     }
   }
 
@@ -101,7 +120,9 @@ class SyncService {
       return transactions;
     } catch (error) {
       console.error('Load transactions error:', error);
-      return [];
+      // Fallback para localStorage
+      const saved = localStorage.getItem('unifiedFinancialData');
+      return saved ? JSON.parse(saved) : [];
     }
   }
 

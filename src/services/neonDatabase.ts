@@ -16,9 +16,12 @@ class NeonDatabase {
   }
 
   async init() {
-    if (this.initialized) return;
+    if (this.initialized) return true;
 
     try {
+      // Testar conexão primeiro
+      await this.sql`SELECT 1`;
+      
       // Criar tabela de transações se não existir
       await this.sql`
         CREATE TABLE IF NOT EXISTS user_transactions (
@@ -45,13 +48,16 @@ class NeonDatabase {
 
       this.initialized = true;
       console.log('🐘 Neon PostgreSQL connected');
+      return true;
     } catch (error) {
       console.error('Database init error:', error);
+      return false;
     }
   }
 
   async addTransaction(userId: string, transaction: any) {
-    await this.init();
+    const connected = await this.init();
+    if (!connected) return false;
     
     try {
       await this.sql`
