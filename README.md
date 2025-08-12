@@ -1,84 +1,80 @@
 # 💰 Diário Financeiro
 
-[![Netlify Status](https://api.netlify.com/api/v1/badges/a45da6df-8890-495f-a358-76b48066f7a6/deploy-status)](https://app.netlify.com/projects/diariofinanceirooficial/deploys)
+Sistema financeiro pessoal **multiusuário** com **sincronização automática** entre dispositivos.
 
-Sistema completo de controle financeiro pessoal com sincronização em nuvem.
+## 🚀 Como usar
 
-## 🚀 **Deploy em Produção**
-
-**URL**: https://diariofinanceirooficial.netlify.app
-
-## 🏗️ **Arquitetura**
-
-- **Frontend**: React + TypeScript + Vite
-- **Backend**: Node.js + Express (Netlify Functions)  
-- **Banco**: PostgreSQL (Neon.tech)
-- **Deploy**: Netlify + Integração Neon.tech
-
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/11221dff-f207-4cbc-a2e9-d09d912669fd) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+### 1. Backend (Obrigatório para multiusuário)
+```bash
+cd backend
+cp .env.example .env
+# Configure DATABASE_URL e JWT_SECRET no .env
+npm install
+npx prisma migrate dev
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### 2. Frontend
+```bash
+cp .env.example .env
+# Configure VITE_API_URL no .env
+npm install
+npm run dev
+```
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## 📱 Funcionalidades
 
-**Use GitHub Codespaces**
+- ✅ **Sistema multiusuário** com login/registro
+- ✅ **Sincronização automática** entre dispositivos
+- ✅ Controle de entradas e saídas
+- ✅ Lançamentos recorrentes
+- ✅ Reserva de emergência
+- ✅ Gastos fixos
+- ✅ Interface responsiva
+- ✅ Funciona offline (dados locais como backup)
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## 🛠️ Tecnologias
 
-## What technologies are used for this project?
+- **Frontend**: React + TypeScript + Vite + Tailwind CSS
+- **Backend**: Node.js + Express + Prisma (opcional)
+- **Banco**: SQLite (local) ou PostgreSQL (produção)
 
-This project is built with:
+## 📦 Deploy
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Netlify (Frontend)
+1. Conecte seu repositório
+2. Configure build: `npm run build`
+3. Pasta de publicação: `dist`
 
-## How can I deploy this project?
+### Render/Railway (Backend - opcional)
+1. Conecte o repositório
+2. Configure variáveis de ambiente
+3. Deploy automático
 
-Simply open [Lovable](https://lovable.dev/projects/11221dff-f207-4cbc-a2e9-d09d912669fd) and click on Share -> Publish.
+## 🔧 Configuração
 
-## Can I connect a custom domain to my Lovable project?
+### Variáveis de ambiente
 
-Yes, you can!
+**Backend (.env)**
+```
+DATABASE_URL="postgresql://user:password@localhost:5432/diario_financeiro"
+JWT_SECRET="your-super-secret-jwt-key-here"
+PORT=3000
+FRONTEND_URL="http://localhost:5173"
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+**Frontend (.env)**
+```
+VITE_API_URL=http://localhost:3000/api
+```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+### Como funciona a sincronização
+
+1. **Com login**: Dados sincronizam automaticamente entre dispositivos
+2. **Sem login**: Funciona offline, dados salvos apenas localmente
+3. **Primeiro login**: Dados locais são enviados para o servidor
+4. **Dispositivos novos**: Baixam dados do servidor automaticamente
+
+## 📄 Licença
+
+MIT License - use como quiser!

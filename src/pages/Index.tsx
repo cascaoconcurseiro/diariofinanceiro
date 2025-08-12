@@ -3,32 +3,32 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUnifiedFinancialSystem } from '../hooks/useUnifiedFinancialSystem';
 import { useReserveAndExpenses } from '../hooks/useReserveAndExpenses';
-import { useRecurringTransactions } from '../hooks/useRecurringTransactions';
+import { useRecurringTransactionManager } from '../hooks/useRecurringTransactionManager';
 import { useRecurringProcessor } from '../hooks/useRecurringProcessor';
 
 import SummaryCard from '../components/SummaryCard';
-import SmartAlerts from '../components/SmartAlerts';
 import EmergencyReserveModal from '../components/EmergencyReserveModal';
 import FixedExpensesModal from '../components/FixedExpensesModal';
 import RecurringTransactionsModal from '../components/RecurringTransactionsModal';
 import MonthNavigation from '../components/MonthNavigation';
 import FinancialTable from '../components/FinancialTable';
 import DayTransactionsModal from '../components/DayTransactionsModal';
-import { AdminPanel } from '../components/AdminPanel';
 import MobileFinancialView from '../components/MobileFinancialView';
-import { useIsMobile } from '../hooks/useMediaQuery';
+import { useIsMobile } from '../hooks/use-mobile';
 import { Button } from '../components/ui/button';
-import SyncStatus from '../components/SyncStatus';
-import { logNavigationChange } from '../utils/recurringDebug';
+
 import { TransactionEntry } from '../types/transactions';
 import { useToast } from '../components/ui/use-toast';
-import { Zap } from 'lucide-react';
+import { Zap, LogOut, Wifi, WifiOff } from 'lucide-react';
 import { formatCurrency } from '../utils/currencyUtils';
+import { useAuth } from '../contexts/AuthContext';
+import { format } from 'date-fns';
 
 const Index = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const { user, logout } = useAuth();
 
   
   const {
@@ -38,18 +38,14 @@ const Index = () => {
     setSelectedYear,
     setSelectedMonth,
     updateDayData,
-    initializeMonth,
     getMonthlyTotals,
-    getYearlyTotals,
-    getDaysInMonth,
-    formatCurrency,
-    recalculateBalances,
     getTransactionsByDate,
     addTransaction,
     deleteTransaction,
-    deleteRecurringInstance,
-    getTransactionById,
-    addToDay
+    deleteAllRecurringTransactions,
+    formatCurrency,
+    isSyncing,
+    syncWithServer
   } = useUnifiedFinancialSystem();
 
   const {
@@ -63,9 +59,9 @@ const Index = () => {
     recurringTransactions,
     addRecurringTransaction,
     updateRecurringTransaction,
-    deleteRecurringTransaction,
+    deleteRecurringComplete,
     getActiveRecurringTransactions
-  } = useRecurringTransactions();
+  } = useRecurringTransactionManager();
 
   const { processRecurringTransactions, clearMonthCache } = useRecurringProcessor();
 
@@ -92,14 +88,8 @@ const Index = () => {
 
   // Initialize month when year/month changes
   useEffect(() => {
-    // Log navigation change for debugging
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth();
-    logNavigationChange(currentYear, currentMonth, selectedYear, selectedMonth);
-    
-    initializeMonth(selectedYear, selectedMonth);
     setInputValues({});
-  }, [selectedYear, selectedMonth, initializeMonth]);
+  }, [selectedYear, selectedMonth]);
 
   // Process recurring transactions when month changes - CORRIGIDO PARA SINCRONIZAÇÃO COMPLETA
   useEffect(() => {
@@ -136,37 +126,27 @@ const Index = () => {
           updateRecurringTransaction
         );
         
-        // Trigger recalculation after processing
-        setTimeout(() => {
-          recalculateBalances();
-        }, 100);
+        // Processamento concluído
       }, 50); // Pequeno delay para evitar múltiplas execuções
       
       // Cleanup timeout se o componente for desmontado
       return () => clearTimeout(timeoutId);
     }
-  }, [selectedYear, selectedMonth, processRecurringTransactions, addTransaction, updateRecurringTransaction, recalculateBalances, getActiveRecurringTransactions, formatCurrency, getFieldLabel]);
+  }, [selectedYear, selectedMonth, processRecurringTransactions, addTransaction, updateRecurringTransaction, getActiveRecurringTransactions, formatCurrency, getFieldLabel]);
 
   useEffect(() => {
     document.title = 'Diário Financeiro - Alertas Inteligentes';
   }, []);
 
   // Calculate totals
-  const yearlyTotals = getYearlyTotals(selectedYear);  
   const monthlyTotals = getMonthlyTotals(selectedYear, selectedMonth);
-  const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
+  const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
 
-  // Generate years array - OTIMIZADO: 41 anos (2025-2065)
-  const YEAR_CONFIG = {
-    START_YEAR: 2025,
-    END_YEAR: 2065,
-    TOTAL_YEARS: 41
-  };
-  
-  const years = useMemo(() => 
-    Array.from({ length: YEAR_CONFIG.TOTAL_YEARS }, (_, i) => YEAR_CONFIG.START_YEAR + i),
-    []
-  );
+  // Generate years array - CORRIGIDO: 5 anos centrados no ano atual
+  const years = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+  }, []);
 
   // Input handling helpers
   const getInputKey = (day: number, field: string) => `${selectedYear}-${selectedMonth}-${day}-${field}`;
@@ -222,7 +202,9 @@ const Index = () => {
 
   // Navigate to quick entry for new transaction
   const handleNavigateToQuickEntry = () => {
-    const dateString = selectedDayDate.toISOString().split('T')[0];
+    // ✅ Sempre navegar para data atual
+    const today = new Date();
+    const dateString = format(today, 'yyyy-MM-dd');
     navigate(`/quick-entry?date=${dateString}`);
   };
 
@@ -240,22 +222,36 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-2 sm:py-4 md:py-8">
       <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
-        {/* Status de Sincronização */}
-        <div className="mb-4 flex justify-end">
-          <SyncStatus />
-        </div>
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 sm:mb-6 md:mb-8">
           <div className="flex-1 text-center">
             <h1 className="text-xl sm:text-2xl md:text-4xl font-bold text-gray-900 mb-1 sm:mb-2">
-              Diário Financeiro
+              💰 Diário Financeiro
             </h1>
-            <p className="text-sm sm:text-lg md:text-xl text-gray-600">Alertas Inteligentes</p>
+            <p className="text-sm sm:text-lg md:text-xl text-gray-600">Olá, {user?.name}!</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 hidden sm:inline">
-              Sistema Financeiro
-            </span>
+            {isSyncing ? (
+              <div className="flex items-center gap-1 text-blue-600">
+                <WifiOff className="w-4 h-4 animate-spin" />
+                <span className="text-xs">Sincronizando...</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 text-green-600">
+                <Wifi className="w-4 h-4" />
+                <span className="text-xs">Online</span>
+              </div>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={logout}
+              className="flex items-center gap-1"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Sair</span>
+            </Button>
           </div>
         </div>
 
@@ -282,13 +278,19 @@ const Index = () => {
         {/* Quick Action Buttons */}
         <div className="flex flex-col sm:flex-row justify-center gap-3 mb-4 sm:mb-6">
           <Button
-            onClick={() => navigate('/quick-entry')}
+            onClick={() => {
+              // ✅ Sempre navegar para data atual
+              const today = new Date();
+              const dateString = format(today, 'yyyy-MM-dd');
+              navigate(`/quick-entry?date=${dateString}`);
+            }}
             className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-semibold px-6 py-3 text-sm sm:text-base flex items-center gap-2 shadow-lg"
           >
             <Zap className="w-5 h-5" />
             Lançamento Rápido
           </Button>
           
+
 
         </div>
 
@@ -333,37 +335,31 @@ const Index = () => {
           </Button>
         </div>
 
-        {/* Smart Alerts */}
-        <SmartAlerts
-          data={data}
-          selectedYear={selectedYear}
-          selectedMonth={selectedMonth}
-          monthlyTotals={monthlyTotals}
-        />
+
 
         {/* Yearly Summary Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-6 mb-4 sm:mb-6 md:mb-8">
           <SummaryCard
             title={`Entradas ${selectedYear}`}
-            value={yearlyTotals.totalEntradas}
+            value={monthlyTotals.totalEntradas}
             icon="📈"
             color="green"
           />
           <SummaryCard
             title={`Saídas ${selectedYear}`}
-            value={yearlyTotals.totalSaidas}
+            value={monthlyTotals.totalSaidas}
             icon="📉"
             color="red"
           />
           <SummaryCard
             title={`Diário ${selectedYear}`}
-            value={yearlyTotals.totalDiario}
+            value={monthlyTotals.totalDiario}
             icon="💰"
             color="blue"
           />
           <SummaryCard
             title={`Saldo Final ${selectedYear}`}
-            value={yearlyTotals.saldoFinal}
+            value={monthlyTotals.saldoFinal}
             icon="🏆"
             color="purple"
           />
@@ -451,7 +447,7 @@ const Index = () => {
           onClose={() => setShowRecurringModal(false)}
           onSave={addRecurringTransaction}
           onUpdate={updateRecurringTransaction}
-          onDelete={deleteRecurringTransaction}
+          onDelete={deleteRecurringComplete}
           currentTransactions={recurringTransactions}
         />
 
@@ -470,41 +466,18 @@ const Index = () => {
 
 
       </div>
-      
-      {/* Admin Panel - Oculto e protegido por senha */}
-      <AdminPanel
-        onClearData={() => {
-          localStorage.removeItem('unifiedFinancialData');
-          localStorage.removeItem('financialData');
-          localStorage.removeItem('recurringTransactions');
-          localStorage.removeItem('reserveAndExpenses');
-          window.location.reload();
-        }}
-        onSystemCheck={() => {
-          // Executar verificação do sistema
-          console.log('🔍 Executando verificação do sistema...');
-          
-          // Verificar localStorage
-          const unifiedData = localStorage.getItem('unifiedFinancialData');
-          const transactionCount = unifiedData ? JSON.parse(unifiedData).length : 0;
-          
-          // Verificar integridade dos dados
-          const systemStatus = {
-            transactionCount,
-            localStorageSize: JSON.stringify(localStorage).length,
-            timestamp: new Date().toISOString(),
-            status: 'healthy'
-          };
-          
-          console.log('✅ Status do sistema:', systemStatus);
-          
-          toast({
-            title: "Verificação Concluída",
-            description: `Sistema OK - ${transactionCount} transações encontradas`,
-            variant: "default"
-          });
-        }}
-      />
+
+      {/* Acesso discreto ao admin */}
+      <div className="text-center mt-8">
+        <button
+          onClick={() => navigate('/admin')}
+          className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          style={{ fontSize: '10px' }}
+        >
+          ⚙️
+        </button>
+      </div>
+
     </div>
   );
 };

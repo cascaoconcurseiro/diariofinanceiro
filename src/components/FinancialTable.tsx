@@ -1,14 +1,14 @@
 
 import React from 'react';
 import { FluidNumberInput } from './FluidNumberInput';
-import { FinancialData } from '../hooks/useFinancialData';
+// Removed unused import
 import { formatCurrency } from '../utils/currencyUtils';
 import { TransactionEntry } from '../types/transactions';
 
 interface FinancialTableProps {
   selectedYear: number;
   selectedMonth: number;
-  data: FinancialData;
+  data: any;
   daysInMonth: number;
   inputValues: {[key: string]: string};
   onInputChange: (day: number, field: 'entrada' | 'saida' | 'diario', value: string) => void;

@@ -9,6 +9,13 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 5173,
   },
+  define: {
+    'import.meta.env.VITE_API_URL': JSON.stringify(
+      mode === 'production' 
+        ? 'https://diariofinanceirooficial.netlify.app/.netlify/functions/api'
+        : 'http://localhost:3000/api'
+    ),
+  },
   plugins: [
     react(),
     mode === 'development' &&

@@ -1,93 +1,78 @@
-
 import { useState, useEffect, useCallback } from 'react';
 
-export interface EmergencyReserve {
-  amount: number;
-  months: 6 | 12;
-  lastUpdated: string;
-}
-
-export interface FixedExpenseCategory {
+export interface ExpenseCategory {
   id: string;
   name: string;
   amount: number;
 }
 
-export interface FixedExpenses {
-  categories: FixedExpenseCategory[];
-  totalAmount: number;
-  lastUpdated: string;
+export interface EmergencyReserve {
+  amount: number;
+  months: number;
 }
 
+export interface FixedExpenses {
+  categories: ExpenseCategory[];
+  totalAmount: number;
+}
+
+const STORAGE_KEY = 'reserveAndExpenses';
+
 export const useReserveAndExpenses = () => {
-  const [emergencyReserve, setEmergencyReserve] = useState<EmergencyReserve>({ 
-    amount: 0, 
-    months: 6,
-    lastUpdated: '' 
+  const [emergencyReserve, setEmergencyReserve] = useState<EmergencyReserve>({
+    amount: 0,
+    months: 6
   });
-  const [fixedExpenses, setFixedExpenses] = useState<FixedExpenses>({ 
+
+  const [fixedExpenses, setFixedExpenses] = useState<FixedExpenses>({
     categories: [],
-    totalAmount: 0,
-    lastUpdated: '' 
+    totalAmount: 0
   });
 
-  // Load data from localStorage on mount
+  // Carregar dados
   useEffect(() => {
-    const savedReserve = localStorage.getItem('emergencyReserve');
-    const savedExpenses = localStorage.getItem('fixedExpenses');
-    
-    if (savedReserve) {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
       try {
-        setEmergencyReserve(JSON.parse(savedReserve));
+        const data = JSON.parse(saved);
+        if (data.emergencyReserve) {
+          setEmergencyReserve(data.emergencyReserve);
+        }
+        if (data.fixedExpenses) {
+          setFixedExpenses(data.fixedExpenses);
+        }
       } catch (error) {
-        console.error('Error loading emergency reserve:', error);
-      }
-    }
-    
-    if (savedExpenses) {
-      try {
-        setFixedExpenses(JSON.parse(savedExpenses));
-      } catch (error) {
-        console.error('Error loading fixed expenses:', error);
+        console.error('Erro ao carregar reserva e gastos:', error);
       }
     }
   }, []);
 
-  // Save data to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('emergencyReserve', JSON.stringify(emergencyReserve));
-  }, [emergencyReserve]);
-
-  useEffect(() => {
-    localStorage.setItem('fixedExpenses', JSON.stringify(fixedExpenses));
-  }, [fixedExpenses]);
-
-  const updateEmergencyReserve = useCallback((amount: number, months: 6 | 12 = 6): void => {
-    setEmergencyReserve({
-      amount,
-      months,
-      lastUpdated: new Date().toISOString()
-    });
+  // Salvar dados
+  const saveData = useCallback((reserve: EmergencyReserve, expenses: FixedExpenses) => {
+    const data = {
+      emergencyReserve: reserve,
+      fixedExpenses: expenses
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }, []);
 
-  const updateFixedExpenses = useCallback((categories: FixedExpenseCategory[]): void => {
+  const updateEmergencyReserve = useCallback((amount: number, months: number) => {
+    const newReserve = { amount, months };
+    setEmergencyReserve(newReserve);
+    saveData(newReserve, fixedExpenses);
+  }, [fixedExpenses, saveData]);
+
+  const updateFixedExpenses = useCallback((categories: ExpenseCategory[]) => {
     const totalAmount = categories.reduce((sum, cat) => sum + cat.amount, 0);
-    setFixedExpenses({
-      categories,
-      totalAmount,
-      lastUpdated: new Date().toISOString()
-    });
-  }, []);
-
-  const getRecommendedEmergencyReserve = useCallback((): number => {
-    return fixedExpenses.totalAmount * emergencyReserve.months;
-  }, [fixedExpenses.totalAmount, emergencyReserve.months]);
+    const newExpenses = { categories, totalAmount };
+    setFixedExpenses(newExpenses);
+    saveData(emergencyReserve, newExpenses);
+  }, [emergencyReserve, saveData]);
 
   return {
     emergencyReserve,
     fixedExpenses,
     updateEmergencyReserve,
-    updateFixedExpenses,
-    getRecommendedEmergencyReserve
+    updateFixedExpenses
   };
 };

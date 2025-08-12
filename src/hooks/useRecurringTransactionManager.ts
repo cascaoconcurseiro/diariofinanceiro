@@ -1,95 +1,111 @@
-/**
- * HOOK PARA GERENCIAMENTO CORRETO DE LANÇAMENTOS RECORRENTES
- * 
- * Combina useRecurringTransactions com useUnifiedFinancialSystem
- * para garantir exclusão correta (mesma lógica do QuickEntry)
- */
-
 import { useCallback } from 'react';
-import { useRecurringTransactions, RecurringTransaction } from './useRecurringTransactions';
+import { useRecurringTransactions } from './useRecurringTransactions';
 import { useUnifiedFinancialSystem } from './useUnifiedFinancialSystem';
 
+// Hook principal que combina recorrentes + transações
 export const useRecurringTransactionManager = () => {
   const {
     recurringTransactions,
     addRecurringTransaction,
     updateRecurringTransaction,
-    deleteRecurringTransaction: deleteRecurringOnly,
-    getActiveRecurringTransactions,
-    getNextExecutionDate
+    deleteRecurringTransaction: deleteRecurringConfig,
+    getActiveRecurringTransactions
   } = useRecurringTransactions();
 
   const {
-    deleteAllRecurringTransactions
+    transactions,
+    addTransaction,
+    deleteTransaction,
+    getTransactionsByDate
   } = useUnifiedFinancialSystem();
 
-  // CORREÇÃO: Exclusão correta que remove tanto o recorrente quanto os lançamentos gerados
-  const deleteRecurringTransaction = useCallback((
-    id: string, 
-    deleteGeneratedTransactions: boolean = true
-  ): { recurringDeleted: boolean; transactionsDeleted: number } => {
+  // ✅ EXCLUSÃO DE INSTÂNCIA ESPECÍFICA (só um mês)
+  const deleteRecurringInstance = useCallback((transactionId: string): boolean => {
+    // Encontrar a transação específica
+    const transaction = transactions.find(t => t.id === transactionId);
+    if (!transaction) return false;
+
+    // Deletar apenas esta instância
+    const success = deleteTransaction(transactionId);
     
-    console.log(`🗑️ MANAGER: Deleting recurring transaction ${id}, deleteGenerated: ${deleteGeneratedTransactions}`);
-    
-    let transactionsDeleted = 0;
-    
-    // 1. Se solicitado, remover todos os lançamentos gerados por este recorrente
-    if (deleteGeneratedTransactions) {
-      transactionsDeleted = deleteAllRecurringTransactions(id);
-      console.log(`🧹 MANAGER: Deleted ${transactionsDeleted} generated transactions`);
+    if (success) {
+      console.log(`✅ Deleted recurring instance: ${transaction.date} - ${transaction.description}`);
     }
     
-    // 2. Remover o lançamento recorrente em si
-    deleteRecurringOnly(id, false); // false para não tentar deletar novamente
-    console.log(`✅ MANAGER: Recurring transaction ${id} deleted successfully`);
+    return success;
+  }, [transactions, deleteTransaction]);
+
+  // ✅ EXCLUSÃO COMPLETA (recorrente + todas as instâncias)
+  const deleteRecurringComplete = useCallback((recurringId: string): { recurringDeleted: boolean; transactionsDeleted: number } => {
+    // 1. Contar e deletar todas as transações geradas
+    const generatedTransactions = transactions.filter(t => t.recurringId === recurringId);
+    let deletedCount = 0;
+
+    generatedTransactions.forEach(transaction => {
+      if (deleteTransaction(transaction.id)) {
+        deletedCount++;
+        console.log(`🗑️ Deleted generated: ${transaction.date} - ${transaction.description}`);
+      }
+    });
+
+    // 2. Deletar o recorrente original
+    const recurringDeleted = deleteRecurringConfig(recurringId);
+
+    console.log(`✅ Deleted recurring ${recurringId}: ${deletedCount} transactions removed`);
     
-    return {
-      recurringDeleted: true,
-      transactionsDeleted
-    };
-  }, [deleteRecurringOnly, deleteAllRecurringTransactions]);
+    return { recurringDeleted, transactionsDeleted: deletedCount };
+  }, [transactions, deleteTransaction, deleteRecurringConfig]);
 
-  // CORREÇÃO: Função para pausar um recorrente (desativar sem deletar lançamentos)
-  const pauseRecurringTransaction = useCallback((id: string): void => {
-    console.log(`⏸️ MANAGER: Pausing recurring transaction ${id}`);
-    updateRecurringTransaction(id, { isActive: false });
+  // ✅ PAUSAR RECORRENTE (desativa sem deletar)
+  const pauseRecurringTransaction = useCallback((recurringId: string): boolean => {
+    updateRecurringTransaction(recurringId, { isActive: false });
+    console.log(`⏸️ Paused recurring: ${recurringId}`);
+    return true;
   }, [updateRecurringTransaction]);
 
-  // CORREÇÃO: Função para reativar um recorrente
-  const resumeRecurringTransaction = useCallback((id: string): void => {
-    console.log(`▶️ MANAGER: Resuming recurring transaction ${id}`);
-    updateRecurringTransaction(id, { isActive: true });
+  // ✅ REATIVAR RECORRENTE
+  const resumeRecurringTransaction = useCallback((recurringId: string): boolean => {
+    updateRecurringTransaction(recurringId, { isActive: true });
+    console.log(`▶️ Resumed recurring: ${recurringId}`);
+    return true;
   }, [updateRecurringTransaction]);
 
-  // Função para obter estatísticas de um lançamento recorrente
-  const getRecurringTransactionStats = useCallback((id: string) => {
-    // Esta função pode ser expandida para mostrar quantos lançamentos foram gerados
-    const transaction = recurringTransactions.find(t => t.id === id);
-    if (!transaction) return null;
+  // ✅ VERIFICAR SE TRANSAÇÃO É RECORRENTE
+  const isRecurringTransaction = useCallback((transactionId: string): boolean => {
+    const transaction = transactions.find(t => t.id === transactionId);
+    return !!(transaction?.recurringId || transaction?.isRecurring);
+  }, [transactions]);
 
-    return {
-      transaction,
-      nextExecution: getNextExecutionDate(transaction),
-      isActive: transaction.isActive
-    };
-  }, [recurringTransactions, getNextExecutionDate]);
+  // ✅ OBTER RECORRENTE ORIGINAL DE UMA TRANSAÇÃO
+  const getRecurringSource = useCallback((transactionId: string) => {
+    const transaction = transactions.find(t => t.id === transactionId);
+    if (!transaction?.recurringId) return null;
+    
+    return recurringTransactions.find(r => r.id === transaction.recurringId) || null;
+  }, [transactions, recurringTransactions]);
 
   return {
-    // Estado
+    // Estados
     recurringTransactions,
+    transactions,
     
-    // Funções CRUD
+    // Funções de recorrentes
     addRecurringTransaction,
     updateRecurringTransaction,
-    deleteRecurringTransaction, // CORRIGIDA
-    
-    // Funções de controle
-    pauseRecurringTransaction,
-    resumeRecurringTransaction,
-    
-    // Funções de consulta
     getActiveRecurringTransactions,
-    getNextExecutionDate,
-    getRecurringTransactionStats
+    
+    // Funções de exclusão (CORRIGIDAS)
+    deleteRecurringInstance,      // Remove só um mês
+    deleteRecurringComplete,      // Remove tudo
+    pauseRecurringTransaction,    // Pausa sem deletar
+    resumeRecurringTransaction,   // Reativa
+    
+    // Utilitários
+    isRecurringTransaction,
+    getRecurringSource,
+    getTransactionsByDate,
+    
+    // Função original para compatibilidade
+    addTransaction
   };
 };

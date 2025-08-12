@@ -1,143 +1,127 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { accountsDB } from '../services/accountsDB';
+import { sanitizeInput, sanitizeEmail, validateEmail, validatePassword, validateName } from '../utils/security';
+import { handleError } from '../utils/errorHandler';
+import { trackEvent, trackError } from '../utils/monitoring';
 
 interface User {
   id: string;
-  name: string;
   email: string;
+  name: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  token: string | null;
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (email: string, password: string, name: string) => Promise<boolean>;
   logout: () => void;
-  checkAuth: () => Promise<boolean>;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Storage keys
-const STORAGE_KEYS = {
-  ACCESS_TOKEN: 'accessToken',
-  REFRESH_TOKEN: 'refreshToken',
-  USER_DATA: 'userData'
-};
-
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [isLoading, setIsLoading] = useState(true);
 
-  const isAuthenticated = !!user;
-
-  // Check if user is authenticated on app load
+  // Verificar se há usuário logado
   useEffect(() => {
+    const checkAuth = () => {
+      const lastUser = accountsDB.getLastUser();
+      const savedToken = localStorage.getItem('token');
+      
+      if (lastUser && savedToken) {
+        setUser(lastUser);
+        setToken(savedToken);
+        console.log('✅ Login automático:', lastUser.name);
+      }
+      setIsLoading(false);
+    };
+
     checkAuth();
   }, []);
 
-  const checkAuth = async (): Promise<boolean> => {
-    setIsLoading(true);
+  const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-      const userData = localStorage.getItem(STORAGE_KEYS.USER_DATA);
-
-      if (token && userData) {
-        // Verify token is still valid
-        const response = await fetch('http://localhost:8000/api/users/profile', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setUser(data.data.user);
-          return true;
-        } else {
-          // Token is invalid, clear storage
-          clearAuthData();
-          return false;
-        }
+      // ✅ Validação e sanitização
+      const cleanEmail = sanitizeEmail(email);
+      if (!validateEmail(cleanEmail) || !validatePassword(password)) {
+        return false;
       }
+      
+      const account = accountsDB.login(cleanEmail, password);
+      
+      if (account) {
+        const userData = {
+          id: account.id,
+          email: account.email,
+          name: account.name
+        };
+        
+        const token = `token_${account.id}`;
+        setToken(token);
+        setUser(userData);
+        localStorage.setItem('token', token);
+        localStorage.setItem('userData', JSON.stringify(userData));
+        trackEvent('login.success', { email: cleanEmail });
+        return true;
+      }
+      trackEvent('login.failed', { email: cleanEmail });
       return false;
     } catch (error) {
-      console.error('Auth check failed:', error);
-      clearAuthData();
+      trackError('login.error', { email: cleanEmail });
       return false;
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  const login = async (email: string, password: string): Promise<void> => {
+  const register = async (email: string, password: string, name: string): Promise<boolean> => {
     try {
-      const response = await fetch('http://localhost:8000/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email, password })
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        // Store tokens and user data
-        localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.data.tokens.accessToken);
-        localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.data.tokens.refreshToken);
-        localStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(data.data.user));
-        
-        setUser(data.data.user);
-      } else {
-        throw new Error(data.error || 'Login failed');
+      // ✅ Validação e sanitização
+      const cleanEmail = sanitizeEmail(email);
+      const cleanName = sanitizeInput(name);
+      
+      if (!validateEmail(cleanEmail) || !validatePassword(password) || !validateName(cleanName)) {
+        return false;
       }
+      
+      const account = accountsDB.createAccount(cleanEmail, password, cleanName);
+      
+      const userData = {
+        id: account.id,
+        email: account.email,
+        name: account.name
+      };
+      
+      // Login automático após registro
+      const token = `token_${account.id}`;
+      setToken(token);
+      setUser(userData);
+      localStorage.setItem('token', token);
+      localStorage.setItem('userData', JSON.stringify(userData));
+      
+      return true;
     } catch (error) {
-      console.error('Login error:', error);
-      throw error;
+      handleError(error, 'AuthContext.register');
+      return false;
     }
   };
 
   const logout = () => {
-    clearAuthData();
+    accountsDB.logout();
     setUser(null);
-    
-    // Optional: Call logout endpoint
-    const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-    if (token) {
-      fetch('http://localhost:8000/api/users/logout', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      }).catch(console.error);
-    }
-  };
-
-  const clearAuthData = () => {
-    localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
-    localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
-    localStorage.removeItem(STORAGE_KEYS.USER_DATA);
-  };
-
-  const value: AuthContextType = {
-    user,
-    isAuthenticated,
-    isLoading,
-    login,
-    logout,
-    checkAuth
+    setToken(null);
   };
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ user, token, login, register, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = (): AuthContextType => {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');

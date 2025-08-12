@@ -1,76 +1,90 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TransactionEntry } from '../types/transactions';
 import { formatCurrency, parseCurrency } from '../utils/currencyUtils';
+import { syncService } from '../services/syncService';
+import { useAuth } from '../contexts/AuthContext';
+import { sanitizeInput, sanitizeAmount } from '../utils/security';
+import { backupSystem } from '../utils/backup';
 
 /**
- * SENIOR SOLUTION: UNIFIED FINANCIAL SYSTEM
- * 
- * Clean, simple, and functional implementation.
- * No over-engineering, just what works.
+ * SISTEMA FINANCEIRO SIMPLIFICADO
+ * Apenas o essencial, sem over-engineering
  */
 export const useUnifiedFinancialSystem = () => {
+  const { user, token } = useAuth();
   const [transactions, setTransactions] = useState<TransactionEntry[]>([]);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
-
-  // Load transactions with sync service
+  
+  // ✅ Sempre abrir no mês atual
   useEffect(() => {
-    const loadTransactions = async () => {
-      try {
-        // Tentar carregar com sync service
-        const { syncService } = await import('../services/syncService');
-        const data = await syncService.loadData('unifiedFinancialData');
-        
-        if (data && Array.isArray(data)) {
-          console.log('💾 UNIFIED: Loading transactions with sync:', data.length);
-          setTransactions(data);
-          return;
-        }
-      } catch (error) {
-        console.warn('⚠️ UNIFIED: Sync service failed, using localStorage');
-      }
+    const now = new Date();
+    setSelectedYear(now.getFullYear());
+    setSelectedMonth(now.getMonth());
+  }, []);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-      // Fallback para localStorage tradicional
-      try {
-        const saved = localStorage.getItem('unifiedFinancialData');
-        if (saved && saved.trim() !== '') {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            console.log('💾 UNIFIED: Loading transactions from localStorage:', parsed.length);
-            setTransactions(parsed);
+  // Carregar dados (local + sincronização)
+  useEffect(() => {
+    const loadData = async () => {
+      if (user && token) {
+        // Usuário logado: buscar do servidor
+        setIsSyncing(true);
+        const serverTransactions = await syncService.fetchTransactions();
+        if (serverTransactions.length > 0) {
+          setTransactions(serverTransactions);
+          // Salvar localmente como backup
+          localStorage.setItem('unifiedFinancialData', JSON.stringify(serverTransactions));
+        } else {
+          // Se servidor vazio, tentar carregar local e sincronizar
+          const saved = localStorage.getItem('unifiedFinancialData');
+          if (saved) {
+            const localTransactions = JSON.parse(saved);
+            if (Array.isArray(localTransactions) && localTransactions.length > 0) {
+              await syncService.syncTransactions(localTransactions);
+              setTransactions(localTransactions);
+            }
           }
         }
-      } catch (error) {
-        console.error('❌ UNIFIED: Error loading data:', error);
-        localStorage.removeItem('unifiedFinancialData');
-        setTransactions([]);
+        setIsSyncing(false);
+      } else {
+        // Usuário não logado: usar apenas local
+        try {
+          const saved = localStorage.getItem('unifiedFinancialData');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+              setTransactions(parsed);
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao carregar dados:', error);
+          setTransactions([]);
+        }
       }
     };
 
-    loadTransactions();
-  }, []);
+    loadData();
+  }, [user, token]);
 
-  // Save transactions with sync service
+  // Salvar dados no localStorage com backup
   useEffect(() => {
-    try {
-      // Importar dinamicamente para evitar problemas de build
-      import('../services/syncService').then(({ syncService }) => {
-        syncService.saveLocal('unifiedFinancialData', transactions);
-        console.log('💾 UNIFIED: Saved transactions with sync:', transactions.length);
-      });
-    } catch (error) {
-      // Fallback para localStorage tradicional
+    if (transactions.length >= 0) {
       localStorage.setItem('unifiedFinancialData', JSON.stringify(transactions));
-      console.log('💾 UNIFIED: Saved transactions locally:', transactions.length);
+      
+      // ✅ Backup automático a cada 10 transações
+      if (transactions.length > 0 && transactions.length % 10 === 0) {
+        backupSystem.createBackup(transactions);
+      }
     }
   }, [transactions]);
 
-  // Generate unique ID
+  // Gerar ID único
   const generateId = useCallback((): string => {
     return `txn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }, []);
 
-  // Add transaction - SINGLE SOURCE OF TRUTH
+  // Adicionar transação
   const addTransaction = useCallback((
     date: string,
     description: string,
@@ -82,18 +96,30 @@ export const useUnifiedFinancialSystem = () => {
     source: 'manual' | 'recurring' | 'quick-entry' = 'manual'
   ): string => {
     
-    // SENIOR APPROACH: Prevent duplicates for recurring transactions
+    // ✅ Prevenir duplicatas para transações recorrentes
     if (isRecurring && recurringId) {
-      const existingRecurring = transactions.find(t => 
+      const existing = transactions.find(t => 
         t.recurringId === recurringId && 
         t.date === date && 
         t.type === type &&
-        Math.abs(t.amount - amount) < 0.01 // Float comparison
+        Math.abs(t.amount - amount) < 0.01
       );
       
-      if (existingRecurring) {
-        console.log(`⚠️ RECURRING: Duplicate prevented for ${date}`);
-        return existingRecurring.id;
+      if (existing) {
+        console.log(`⏭️ Duplicate prevented: ${sanitizeInput(date)} - ${sanitizeInput(description)}`);
+        return existing.id;
+      }
+    }
+    
+    // ✅ Para recorrentes, verificar se é data futura
+    if (isRecurring) {
+      const targetDate = new Date(date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Zerar horas para comparação apenas de data
+      
+      if (targetDate < today) {
+        console.log(`⏭️ Skipping past recurring date: ${sanitizeInput(date)}`);
+        return ''; // Não criar transação para data passada
       }
     }
 
@@ -102,87 +128,73 @@ export const useUnifiedFinancialSystem = () => {
     
     const newTransaction: TransactionEntry = {
       id,
-      date,
-      description,
-      amount,
+      date: sanitizeInput(date),
+      description: sanitizeInput(description),
+      amount: sanitizeAmount(amount),
       type,
-      category: category || 'Geral',
+      category: sanitizeInput(category || 'Geral'),
       isRecurring,
-      recurringId,
-      source,
+      recurringId: recurringId ? sanitizeInput(recurringId) : undefined,
+      source: sanitizeInput(source),
       createdAt: now,
       updatedAt: now
     };
 
-    setTransactions(prev => {
-      const updated = [...prev, newTransaction];
-      console.log(`✅ UNIFIED: Added transaction ${type} R$ ${amount} on ${date}`);
-      return updated;
-    });
-
+    setTransactions(prev => [...prev, newTransaction]);
+    
+    // Sincronizar com servidor se logado
+    if (user && token && syncService.isOnline()) {
+      syncService.createTransaction(newTransaction).catch(console.error);
+    }
+    
     return id;
   }, [transactions, generateId]);
 
-  // Delete transaction - CLEAN AND SIMPLE
+  // Deletar transação
   const deleteTransaction = useCallback((id: string): boolean => {
     let deleted = false;
     
     setTransactions(prev => {
-      const transactionToDelete = prev.find(t => t.id === id);
-      if (!transactionToDelete) {
-        console.warn(`⚠️ UNIFIED: Transaction ${id} not found for deletion`);
-        return prev;
-      }
-      
       const filtered = prev.filter(t => t.id !== id);
-      deleted = true;
-      
-      console.log(`🗑️ UNIFIED: Deleted transaction ${transactionToDelete.type} R$ ${transactionToDelete.amount}`);
+      deleted = filtered.length !== prev.length;
       return filtered;
     });
+    
+    // Sincronizar com servidor se logado
+    if (deleted && user && token && syncService.isOnline()) {
+      syncService.deleteTransaction(id).catch(console.error);
+    }
 
     return deleted;
   }, []);
 
-  // Delete recurring instance - USES SAME LOGIC AS NORMAL DELETE
-  const deleteRecurringInstance = useCallback((recurringId: string, date: string): boolean => {
-    const transactionToDelete = transactions.find(t => 
-      (t.recurringId === recurringId || t.id === recurringId) && t.date === date
-    );
+  // Deletar apenas instância específica de recorrente
+  const deleteRecurringInstance = useCallback((transactionId: string): boolean => {
+    let deleted = false;
     
-    if (!transactionToDelete) {
-      console.warn(`⚠️ UNIFIED: Recurring instance not found for ${recurringId} on ${date}`);
-      return false;
-    }
+    setTransactions(prev => {
+      const filtered = prev.filter(t => t.id !== transactionId);
+      deleted = filtered.length !== prev.length;
+      return filtered;
+    });
     
-    // Use the same delete logic - SENIOR APPROACH: DRY principle
-    return deleteTransaction(transactionToDelete.id);
-  }, [transactions, deleteTransaction]);
-
-  // CORREÇÃO: Delete all transactions generated by a recurring transaction
+    return deleted;
+  }, []);
+  
+  // Deletar todas as transações de um recorrente
   const deleteAllRecurringTransactions = useCallback((recurringId: string): number => {
     let deletedCount = 0;
     
     setTransactions(prev => {
-      const transactionsToDelete = prev.filter(t => t.recurringId === recurringId);
-      deletedCount = transactionsToDelete.length;
-      
-      if (deletedCount > 0) {
-        console.log(`🧹 UNIFIED: Deleting ${deletedCount} transactions generated by recurring ${recurringId}`);
-        transactionsToDelete.forEach(t => {
-          console.log(`  🗑️ Deleting: ${t.date} - ${t.description} - ${t.amount}`);
-        });
-        
-        return prev.filter(t => t.recurringId !== recurringId);
-      }
-      
-      return prev;
+      const toDelete = prev.filter(t => t.recurringId === recurringId);
+      deletedCount = toDelete.length;
+      return prev.filter(t => t.recurringId !== recurringId);
     });
     
     return deletedCount;
   }, []);
 
-  // Update day data - CLEAN IMPLEMENTATION
+  // Atualizar dados do dia
   const updateDayData = useCallback((
     year: number, 
     month: number, 
@@ -193,20 +205,20 @@ export const useUnifiedFinancialSystem = () => {
     const amount = parseCurrency(value);
     const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
-    // Remove existing manual transactions for this day/field
-    const existingTransactions = transactions.filter(t => 
+    // Remover transações manuais existentes para este dia/campo
+    const existing = transactions.filter(t => 
       t.date === date && t.type === field && t.source === 'manual'
     );
     
-    existingTransactions.forEach(transaction => {
+    existing.forEach(transaction => {
       deleteTransaction(transaction.id);
     });
     
-    // Add new transaction if amount > 0
+    // Adicionar nova transação se valor > 0
     if (amount > 0) {
       addTransaction(
         date, 
-        `${field.charAt(0).toUpperCase() + field.slice(1)} manual - ${formatCurrency(amount)}`, 
+        `${field.charAt(0).toUpperCase() + field.slice(1)} - ${formatCurrency(amount)}`, 
         amount, 
         field, 
         undefined, 
@@ -217,18 +229,32 @@ export const useUnifiedFinancialSystem = () => {
     }
   }, [transactions, addTransaction, deleteTransaction]);
 
-  // Get transactions by date
+  // ✅ Obter transações por data (otimizado)
+  const transactionsByDate = useMemo(() => {
+    const map = new Map<string, TransactionEntry[]>();
+    transactions.forEach(t => {
+      if (!map.has(t.date)) map.set(t.date, []);
+      map.get(t.date)!.push(t);
+    });
+    return map;
+  }, [transactions]);
+
   const getTransactionsByDate = useCallback((date: string): TransactionEntry[] => {
-    return transactions.filter(t => t.date === date);
+    return transactionsByDate.get(date) || [];
+  }, [transactionsByDate]);
+
+  // ✅ Cache para totais mensais
+  const monthlyTotalsCache = useMemo(() => {
+    const cache = new Map<string, any>();
+    return cache;
   }, [transactions]);
 
-  // Get transaction by ID
-  const getTransactionById = useCallback((id: string): TransactionEntry | undefined => {
-    return transactions.find(t => t.id === id);
-  }, [transactions]);
-
-  // Calculate monthly totals - OPTIMIZED WITH USEMEMO
+  // Calcular totais mensais (com cache)
   const getMonthlyTotals = useCallback((year: number, month: number) => {
+    const cacheKey = `${year}-${month}`;
+    if (monthlyTotalsCache.has(cacheKey)) {
+      return monthlyTotalsCache.get(cacheKey);
+    }
     const monthTransactions = transactions.filter(t => {
       const [tYear, tMonth] = t.date.split('-').map(Number);
       return tYear === year && tMonth === month + 1;
@@ -252,7 +278,7 @@ export const useUnifiedFinancialSystem = () => {
       }
     });
 
-    // Calculate balance from ALL transactions up to this month
+    // Calcular saldo acumulado até este mês
     const allTransactionsUpToMonth = transactions.filter(t => {
       const [tYear, tMonth] = t.date.split('-').map(Number);
       return tYear < year || (tYear === year && tMonth <= month + 1);
@@ -273,40 +299,20 @@ export const useUnifiedFinancialSystem = () => {
       }
     });
 
-    return { totalEntradas, totalSaidas, totalDiario, saldoFinal };
-  }, [transactions]);
+    const result = { totalEntradas, totalSaidas, totalDiario, saldoFinal };
+    monthlyTotalsCache.set(cacheKey, result);
+    return result;
+  }, [transactions, monthlyTotalsCache]);
 
-  // Calculate yearly totals
-  const getYearlyTotals = useCallback((year: number) => {
-    let totalEntradas = 0;
-    let totalSaidas = 0;
-    let totalDiario = 0;
-    let saldoFinal = 0;
-    
-    for (let month = 0; month < 12; month++) {
-      const monthlyTotals = getMonthlyTotals(year, month);
-      totalEntradas += monthlyTotals.totalEntradas;
-      totalSaidas += monthlyTotals.totalSaidas;
-      totalDiario += monthlyTotals.totalDiario;
-      
-      if (monthlyTotals.saldoFinal !== 0) {
-        saldoFinal = monthlyTotals.saldoFinal;
-      }
-    }
-    
-    return { totalEntradas, totalSaidas, totalDiario, saldoFinal };
-  }, [getMonthlyTotals]);
-
-  // Build financial data structure for display - MEMOIZED FOR PERFORMANCE
+  // Estrutura de dados para exibição
   const data = useMemo(() => {
     const result: any = {};
     
-    // Get all years that have transactions
+    // Anos com transações + ano atual + ano selecionado
     const yearsWithTransactions = [...new Set(
       transactions.map(t => parseInt(t.date.split('-')[0]))
-    )].sort((a, b) => a - b);
+    )];
     
-    // Always include current year and selected year
     const yearsToProcess = [...new Set([
       ...yearsWithTransactions,
       new Date().getFullYear(),
@@ -342,7 +348,7 @@ export const useUnifiedFinancialSystem = () => {
             }
           });
           
-          // Calculate running balance up to this day
+          // Saldo acumulado até este dia
           const allTransactionsUpToDay = transactions.filter(t => t.date <= date);
           let balance = 0;
           allTransactionsUpToDay.forEach(t => {
@@ -372,24 +378,8 @@ export const useUnifiedFinancialSystem = () => {
     return result;
   }, [transactions, selectedYear, getTransactionsByDate]);
 
-  // Initialize month - SIMPLE IMPLEMENTATION
-  const initializeMonth = useCallback((year: number, month: number) => {
-    // Month is automatically initialized when data is accessed
-    console.log(`📅 UNIFIED: Month ${year}-${month + 1} initialized`);
-  }, []);
-
-  // Get days in month
-  const getDaysInMonth = useCallback((year: number, month: number): number => {
-    return new Date(year, month + 1, 0).getDate();
-  }, []);
-
-  // Dummy recalculate function - NOT NEEDED IN CLEAN IMPLEMENTATION
-  const recalculateBalances = useCallback(() => {
-    console.log('🧮 UNIFIED: Balance recalculation triggered (automatic via transactions)');
-  }, []);
-
   return {
-    // State
+    // Estado
     transactions,
     selectedYear,
     selectedMonth,
@@ -397,23 +387,30 @@ export const useUnifiedFinancialSystem = () => {
     setSelectedMonth,
     data,
     
-    // Core functions
+    // Funções principais
     addTransaction,
     deleteTransaction,
     deleteRecurringInstance,
     deleteAllRecurringTransactions,
     updateDayData,
     
-    // Query functions
+    // Funções de consulta
     getTransactionsByDate,
-    getTransactionById,
     getMonthlyTotals,
-    getYearlyTotals,
     
-    // Utility functions
-    initializeMonth,
-    getDaysInMonth,
+    // Utilitários
     formatCurrency,
-    recalculateBalances
+    
+    // Sincronização
+    isSyncing,
+    syncWithServer: async () => {
+      if (user && token) {
+        setIsSyncing(true);
+        const success = await syncService.syncTransactions(transactions);
+        setIsSyncing(false);
+        return success;
+      }
+      return false;
+    }
   };
 };

@@ -6,6 +6,8 @@
   # Backend functions
   functions = "netlify/functions"
 
+# Funções nativas sem dependências externas
+
 [build.environment]
   NODE_VERSION = "18"
   NPM_FLAGS = "--production=false"
@@ -19,7 +21,17 @@
 # API redirects para functions
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/:splat"
+  to = "/.netlify/functions/api"
+  status = 200
+
+[[redirects]]
+  from = "/auth/*"
+  to = "/.netlify/functions/auth"
+  status = 200
+
+[[redirects]]
+  from = "/sync/*"
+  to = "/.netlify/functions/sync"
   status = 200
 
 # Headers de segurança

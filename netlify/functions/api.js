@@ -1,45 +1,48 @@
-const express = require('express');
-const serverless = require('serverless-http');
-const cors = require('cors');
+// Função serverless nativa para Netlify
+exports.handler = async (event, context) => {
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Content-Type': 'application/json'
+  };
 
-// Importar as rotas do backend
-const { apiRoutes } = require('../../backend/src/routes');
-const healthRoutes = require('../../backend/src/routes/healthRoutes');
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
+  }
 
-const app = express();
+  try {
+    const path = event.path.replace('/.netlify/functions/api', '');
+    
+    if (path === '/health' || path === '') {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          message: 'API funcionando!',
+          timestamp: new Date().toISOString(),
+          status: 'healthy'
+        })
+      };
+    }
 
-// Middleware
-app.use(cors({
-  origin: true,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({
+        error: 'Not Found',
+        message: `Route ${path} not found`
+      })
+    };
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Health check
-app.use('/health', healthRoutes);
-
-// API Routes
-app.use('/api', apiRoutes);
-
-// Error handler
-app.use((err, req, res, next) => {
-  console.error('API Error:', err);
-  res.status(500).json({
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
-  });
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    error: 'Not Found',
-    message: `Route ${req.originalUrl} not found`
-  });
-});
-
-module.exports.handler = serverless(app);
+  } catch (error) {
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        error: 'Internal Server Error',
+        message: error.message
+      })
+    };
+  }
+};

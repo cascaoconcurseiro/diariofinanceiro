@@ -79,27 +79,27 @@ const RecurringTransactionsModal: React.FC<RecurringTransactionsModalProps> = ({
     onUpdate(id, { isActive: !isActive });
   };
 
-  // CORREÇÃO: Função para exclusão com confirmação (mesma lógica do QuickEntry)
+  // ✅ EXCLUSÃO COMPLETA: Recorrente + todas as instâncias
   const handleDelete = (id: string) => {
     const transaction = currentTransactions.find(t => t.id === id);
     if (!transaction) return;
 
-    const confirmMessage = `Tem certeza que deseja excluir "${transaction.description}"?\n\n` +
-      `⚠️ ATENÇÃO: Isso também removerá TODOS os lançamentos já gerados por esta recorrência.\n\n` +
-      `Clique OK para confirmar a exclusão completa.`;
+    const confirmMessage = `Excluir completamente "${transaction.description}"?\n\n` +
+      `⚠️ ATENÇÃO: Isso removerá:\n` +
+      `• O lançamento recorrente\n` +
+      `• TODOS os lançamentos já gerados\n` +
+      `• Não gerará mais nos próximos meses\n\n` +
+      `Para pausar sem deletar, use "Pausar".`;
 
     if (window.confirm(confirmMessage)) {
       try {
-        const result = onDelete(id, true); // true = deletar lançamentos gerados
+        const result = onDelete(id, true);
         
         toast({
           title: "Sucesso",
-          description: `Lançamento recorrente excluído! ${result.transactionsDeleted} lançamentos gerados também foram removidos.`,
+          description: `Recorrente excluído! ${result.transactionsDeleted} lançamentos removidos.`,
         });
-        
-        console.log(`✅ MODAL: Deleted recurring ${id} and ${result.transactionsDeleted} generated transactions`);
       } catch (error) {
-        console.error('❌ MODAL: Error deleting recurring transaction:', error);
         toast({
           title: "Erro",
           description: "Falha ao excluir o lançamento recorrente.",

@@ -5,7 +5,7 @@ import { Input } from './ui/input';
 import { ChevronDown, ChevronUp, Plus, Minus, DollarSign } from 'lucide-react';
 import { formatCurrency, parseCurrency } from '../utils/currencyUtils';
 import { TransactionEntry } from '../types/transactions';
-import { useDebounce } from '../hooks/useDebounce';
+
 
 interface MobileFinancialViewProps {
   selectedYear: number;

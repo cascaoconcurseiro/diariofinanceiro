@@ -7,6 +7,8 @@ import { ptBR } from 'date-fns/locale';
 import { TransactionEntry } from '../types/transactions';
 import { formatCurrency } from '../utils/currencyUtils';
 import { cn } from '@/lib/utils';
+import RecurringInstanceModal from './RecurringInstanceModal';
+import { useRecurringTransactionManager } from '../hooks/useRecurringTransactionManager';
 
 interface DayTransactionsModalProps {
   isOpen: boolean;
@@ -29,6 +31,10 @@ const DayTransactionsModal: React.FC<DayTransactionsModalProps> = ({
 }) => {
   const [transactions, setTransactions] = useState<TransactionEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [showRecurringModal, setShowRecurringModal] = useState(false);
+  const [selectedRecurringTransaction, setSelectedRecurringTransaction] = useState<TransactionEntry | null>(null);
+  
+  const { deleteRecurringInstance, isRecurringTransaction } = useRecurringTransactionManager();
 
   // SOLUÇÃO DEFINITIVA: Carregar transações IMEDIATAMENTE sem delay
   useEffect(() => {
@@ -100,10 +106,28 @@ const DayTransactionsModal: React.FC<DayTransactionsModalProps> = ({
     }
   };
 
-  // SOLUÇÃO SIMPLIFICADA: Apenas editar - leva para a transação original
+  // Lidar com edição/exclusão de transações
   const handleEditTransaction = (transaction: TransactionEntry) => {
-    console.log('✏️ SIMPLIFICADO: Editing transaction:', transaction.id);
-    onEditTransaction(transaction);
+    const isRecurring = isRecurringTransaction(transaction.id);
+    
+    if (isRecurring) {
+      // Para recorrentes, mostrar modal de opções
+      setSelectedRecurringTransaction(transaction);
+      setShowRecurringModal(true);
+    } else {
+      // Para manuais, editar normalmente
+      onEditTransaction(transaction);
+    }
+  };
+  
+  const handleDeleteInstance = (transactionId: string) => {
+    const success = deleteRecurringInstance(transactionId);
+    if (success) {
+      // Recarregar transações
+      const dateString = format(selectedDate, 'yyyy-MM-dd');
+      const updatedTransactions = getTransactionsByDate(dateString);
+      setTransactions(updatedTransactions);
+    }
   };
 
   const renderTransactionItem = (transaction: TransactionEntry) => {
@@ -134,7 +158,7 @@ const DayTransactionsModal: React.FC<DayTransactionsModalProps> = ({
             <p className="text-sm text-gray-600">{transaction.description}</p>
           )}
           <p className="text-xs text-gray-500 mt-1">
-            💡 Clique para editar ou gerenciar esta transação
+            {isRecurring ? '💡 Clique para gerenciar este lançamento recorrente' : '💡 Clique para editar esta transação'}
           </p>
         </div>
         <div className="flex items-center">
@@ -146,7 +170,7 @@ const DayTransactionsModal: React.FC<DayTransactionsModalProps> = ({
               handleEditTransaction(transaction);
             }}
             className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-            title="Editar transação"
+            title={isRecurring ? 'Gerenciar recorrente' : 'Editar transação'}
           >
             <Edit className="w-4 h-4" />
           </Button>
@@ -272,6 +296,20 @@ const DayTransactionsModal: React.FC<DayTransactionsModalProps> = ({
           )}
         </div>
       </DialogContent>
+      
+      {/* Modal de Instância Recorrente */}
+      {selectedRecurringTransaction && (
+        <RecurringInstanceModal
+          isOpen={showRecurringModal}
+          onClose={() => {
+            setShowRecurringModal(false);
+            setSelectedRecurringTransaction(null);
+          }}
+          transaction={selectedRecurringTransaction}
+          onDeleteInstance={handleDeleteInstance}
+          onManageRecurring={onNavigateToRecurring}
+        />
+      )}
     </Dialog>
   );
 };

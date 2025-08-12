@@ -1,12 +1,10 @@
-// Schema para PostgreSQL (Neon.tech) com fallback SQLite
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -16,10 +14,7 @@ model User {
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  lastLoginAt DateTime?
-  isActive  Boolean  @default(true)
 
-  // Relacionamentos
   transactions Transaction[]
 
   @@map("users")
@@ -28,16 +23,17 @@ model User {
 model Transaction {
   id          String   @id @default(cuid())
   userId      String
-  date        DateTime
+  date        String
   description String
   amount      Float
-  type        String   // "ENTRADA" ou "SAIDA"
+  type        String
   category    String?
-  source      String   @default("MANUAL")
+  isRecurring Boolean  @default(false)
+  recurringId String?
+  source      String   @default("manual")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relacionamentos
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("transactions")

@@ -1,143 +1,199 @@
-import React, { useState, useEffect } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useAuth } from '@/contexts/AuthContext';
-import { TEST_USERS, handleAuthError } from '@/services/authService';
+import React, { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { useToast } from '../components/ui/use-toast';
+import { accountsDB } from '../services/accountsDB';
+import { validateEmail, validatePassword, validateName } from '../utils/security';
+import { rateLimiter } from '../utils/rateLimit';
 
 const Login = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const { login, register } = useAuth();
+  const { toast } = useToast();
+  const [isLogin, setIsLogin] = useState(true);
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    name: ''
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [keepConnected, setKeepConnected] = useState(true);
+  // ❌ REMOVIDO: Lista de emails é vulnerabilidade de privacidade
 
-  const { login, isAuthenticated } = useAuth();
-  const location = useLocation();
-
-  // If already authenticated, redirect to intended page or home
-  if (isAuthenticated) {
-    const from = location.state?.from?.pathname || '/';
-    return <Navigate to={from} replace />;
-  }
-
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-    setSuccess('');
+    setIsLoading(true);
+
+    // ✅ Rate limiting
+    const clientIP = 'user_' + (formData.email || 'anonymous');
+    if (!rateLimiter.isAllowed(clientIP, 5, 15 * 60 * 1000)) {
+      const remainingTime = rateLimiter.getRemainingTime(clientIP);
+      toast({
+        title: "Muitas tentativas",
+        description: `Tente novamente em ${remainingTime} minutos`,
+        variant: "destructive"
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    // ✅ Validação de entrada
+    if (!validateEmail(formData.email)) {
+      toast({
+        title: "Erro",
+        description: "Email inválido",
+        variant: "destructive"
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    if (!validatePassword(formData.password)) {
+      toast({
+        title: "Erro",
+        description: "Senha deve ter pelo menos 6 caracteres",
+        variant: "destructive"
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    if (!isLogin && !validateName(formData.name)) {
+      toast({
+        title: "Erro",
+        description: "Nome deve ter pelo menos 2 caracteres",
+        variant: "destructive"
+      });
+      setIsLoading(false);
+      return;
+    }
 
     try {
-      await login(email, password);
-      setSuccess('Login realizado com sucesso! Redirecionando...');
+      let success = false;
       
-      // Redirect will happen automatically via AuthContext
-      setTimeout(() => {
-        const from = location.state?.from?.pathname || '/';
-        window.location.href = from;
-      }, 1500);
-    } catch (err: any) {
-      const authError = handleAuthError(err);
-      setError(authError.message);
+      if (isLogin) {
+        success = await login(formData.email, formData.password);
+        if (success) {
+          toast({
+            title: "Sucesso",
+            description: `Bem-vindo de volta! ${keepConnected ? 'Você permanecerá conectado.' : ''}`
+          });
+        } else {
+          toast({
+            title: "Erro",
+            description: "Email ou senha incorretos",
+            variant: "destructive"
+          });
+        }
+      } else {
+        success = await register(formData.email, formData.password, formData.name);
+        if (success) {
+          toast({
+            title: "Sucesso",
+            description: `Conta criada com sucesso! Bem-vindo, ${formData.name}!`
+          });
+        } else {
+          toast({
+            title: "Erro",
+            description: "Este email já está em uso",
+            variant: "destructive"
+          });
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro de conexão",
+        variant: "destructive"
+      });
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const fillTestUser = (userId: string) => {
-    const user = TEST_USERS.find(u => u.id === userId);
-    if (user) {
-      setEmail(user.email);
-      setPassword(user.password);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl text-center">Diário Financeiro</CardTitle>
-          <CardDescription className="text-center">
-            Faça login para acessar suas finanças
-          </CardDescription>
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold">
+            💰 Diário Financeiro
+          </CardTitle>
+          <p className="text-gray-600">
+            {isLogin ? 'Entre na sua conta' : 'Crie sua conta'}
+          </p>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {!isLogin && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Nome</label>
+                <Input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  placeholder="Seu nome"
+                  required
+                />
+              </div>
+            )}
+            
+            <div>
+              <label className="block text-sm font-medium mb-1">Email</label>
               <Input
-                id="email"
                 type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
                 placeholder="seu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
+            <div>
+              <label className="block text-sm font-medium mb-1">Senha</label>
               <Input
-                id="password"
                 type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({...formData, password: e.target.value})}
                 placeholder="Sua senha"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </div>
 
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
+            {isLogin && (
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="keepConnected"
+                  checked={keepConnected}
+                  onChange={(e) => setKeepConnected(e.target.checked)}
+                  className="rounded"
+                />
+                <label htmlFor="keepConnected" className="text-sm text-gray-600">
+                  Manter conectado
+                </label>
+              </div>
             )}
-
-            {success && (
-              <Alert>
-                <AlertDescription className="text-green-600">{success}</AlertDescription>
-              </Alert>
-            )}
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Entrando...' : 'Entrar'}
+            
+            <Button 
+              type="submit" 
+              className="w-full"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Carregando...' : (isLogin ? 'Entrar' : 'Criar Conta')}
             </Button>
           </form>
+          
 
-          <div className="mt-6">
-            <div className="text-sm text-gray-600 mb-3 font-medium">👥 Usuários de teste:</div>
-            <div className="space-y-2">
-              {TEST_USERS.map((user) => (
-                <Button
-                  key={user.id}
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-xs justify-start"
-                  onClick={() => fillTestUser(user.id)}
-                  disabled={loading}
-                >
-                  <div className="text-left">
-                    <div className="font-medium">👤 {user.name}</div>
-                    <div className="text-gray-500">{user.description}</div>
-                  </div>
-                </Button>
-              ))}
-            </div>
-            <div className="mt-3 text-xs text-gray-500">
-              💡 Clique em um usuário para preencher automaticamente
-            </div>
-          </div>
-
+          
           <div className="mt-4 text-center">
-            <p className="text-sm text-gray-600">
-              Não tem conta?{' '}
-              <a href="/register" className="text-blue-600 hover:underline">
-                Registre-se
-              </a>
-            </p>
+            <button
+              type="button"
+              onClick={() => setIsLogin(!isLogin)}
+              className="text-blue-600 hover:underline"
+            >
+              {isLogin ? 'Não tem conta? Criar conta' : 'Já tem conta? Fazer login'}
+            </button>
           </div>
         </CardContent>
       </Card>

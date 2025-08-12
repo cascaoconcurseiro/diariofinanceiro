@@ -7,7 +7,7 @@ import { ArrowLeft } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '../components/ui/use-toast';
 import { formatCurrency } from '../utils/currencyUtils';
-import { useIsMobile } from '../hooks/useMediaQuery';
+import { useIsMobile } from '../hooks/use-mobile';
 import TransactionForm from '../components/TransactionForm';
 import TransactionsList from '../components/TransactionsList';
 
@@ -23,7 +23,12 @@ const QuickEntry = () => {
     deleteTransaction
   } = useUnifiedFinancialSystem();
 
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    // ✅ Sempre iniciar com data atual
+    const now = new Date();
+    now.setHours(12, 0, 0, 0); // Meio-dia para evitar problemas de timezone
+    return now;
+  });
   const [transactionType, setTransactionType] = useState<'entrada' | 'saida' | 'diario'>('entrada');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -45,12 +50,17 @@ const QuickEntry = () => {
     const dateParam = searchParams.get('date');
     const editParam = searchParams.get('edit');
     
-    if (dateParam) {
-      // Parse date correctly to avoid timezone issues
-      const [year, month, day] = dateParam.split('-').map(Number);
-      const correctDate = new Date(year, month - 1, day); // month - 1 because Date uses 0-based months
-      console.log('📅 Setting date from URL param:', dateParam, '→', correctDate);
-      setSelectedDate(correctDate);
+    // ✅ SEMPRE usar data atual, ignorar parâmetro de data
+    const now = new Date();
+    now.setHours(12, 0, 0, 0);
+    setSelectedDate(now);
+    console.log('📅 Forced current date:', format(now, 'yyyy-MM-dd'));
+    
+    // Se tem parâmetro de data diferente do atual, redirecionar
+    if (dateParam && dateParam !== format(now, 'yyyy-MM-dd')) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.set('date', format(now, 'yyyy-MM-dd'));
+      navigate(`/quick-entry?${newParams.toString()}`, { replace: true });
     }
 
     // Check if editing a specific transaction

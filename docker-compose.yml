@@ -1,0 +1,43 @@
+# Docker Compose para desenvolvimento
+version: '3.8'
+
+services:
+  frontend:
+    build: .
+    ports:
+      - "5173:5173"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:3000/api
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run dev
+
+  backend:
+    build: ./backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=file:./dev.db
+      - JWT_SECRET=dev-secret-key
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # PostgreSQL para produção
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=diario_financeiro
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
