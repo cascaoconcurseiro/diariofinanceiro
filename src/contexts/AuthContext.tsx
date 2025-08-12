@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { accountsDB } from '../services/accountsDB';
+import { neonDB } from '../services/neonDatabase';
 import { sanitizeInput, sanitizeEmail, validateEmail, validatePassword, validateName } from '../utils/security';
 import { handleError } from '../utils/errorHandler';
 import { trackEvent, trackError } from '../utils/monitoring';
@@ -30,17 +30,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Verificar se há usuário logado
   useEffect(() => {
     const checkAuth = () => {
-      const lastUser = accountsDB.getLastUser();
+      const savedUser = localStorage.getItem('userData');
       const savedToken = localStorage.getItem('token');
       
-      if (lastUser && savedToken) {
-        setUser(lastUser);
+      if (savedUser && savedToken) {
+        const userData = JSON.parse(savedUser);
+        setUser(userData);
         setToken(savedToken);
         
         // ✅ INICIALIZAR SINCRONIZAÇÃO
-        syncService.setUserId(lastUser.id);
+        syncService.setUserId(userData.id);
         
-        console.log('✅ Login automático:', lastUser.name);
+        console.log('✅ Login automático:', userData.name);
       }
       setIsLoading(false);
     };
@@ -52,20 +53,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // ✅ Validação e sanitização
       const cleanEmail = sanitizeEmail(email);
-      if (!validateEmail(cleanEmail) || !validatePassword(password)) {
+      if (!validateEmail(cleanEmail)) {
         return false;
       }
       
-      const account = await accountsDB.login(cleanEmail, password);
+      const result = await neonDB.authenticateUser(cleanEmail, password);
       
-      if (account) {
+      if (result.success && result.user) {
         const userData = {
-          id: account.id,
-          email: account.email,
-          name: account.name
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name
         };
         
-        const token = `token_${account.id}`;
+        const token = `token_${result.user.id}`;
         setToken(token);
         setUser(userData);
         localStorage.setItem('token', token);
@@ -74,14 +75,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // ✅ INICIALIZAR SINCRONIZAÇÃO
         syncService.setUserId(userData.id);
         
-        trackEvent('login.success', { email: cleanEmail });
+        console.log('✅ Login realizado:', userData.name);
         return true;
       }
-      trackEvent('login.failed', { email: cleanEmail });
+      
+      console.log('❌ Login falhou:', result.error);
       return false;
     } catch (error) {
       console.error('Erro no login:', error);
-      trackError('login.error', { email: cleanEmail });
       return false;
     }
   };
@@ -124,9 +125,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    accountsDB.logout();
+    localStorage.removeItem('token');
+    localStorage.removeItem('userData');
     setUser(null);
     setToken(null);
+    console.log('✅ Logout realizado');
   };
 
   return (

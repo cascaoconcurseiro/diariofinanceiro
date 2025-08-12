@@ -24,6 +24,18 @@ class NeonDatabase {
       // Testar conexão primeiro
       await this.sql`SELECT 1`;
       
+      // Criar tabela de usuários
+      await this.sql`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          email TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `;
+      
       // Criar tabela de transações se não existir
       await this.sql`
         CREATE TABLE IF NOT EXISTS user_transactions (
@@ -42,11 +54,19 @@ class NeonDatabase {
         )
       `;
 
-      // Criar índice para performance
+      // Criar índices para performance
       await this.sql`
         CREATE INDEX IF NOT EXISTS idx_user_transactions_user_id 
         ON user_transactions(user_id)
       `;
+      
+      await this.sql`
+        CREATE INDEX IF NOT EXISTS idx_users_email 
+        ON users(email)
+      `;
+
+      // Inserir usuários de teste se não existirem
+      await this.createTestUsers();
 
       this.initialized = true;
       console.log('🐘 Neon PostgreSQL connected');
@@ -166,6 +186,63 @@ class NeonDatabase {
     } catch (error) {
       console.error('Get last update error:', error);
       return null;
+    }
+  }
+
+  // Criar usuários de teste
+  async createTestUsers() {
+    const testUsers = [
+      { id: 'wesley', name: 'Wesley', email: 'wesley@teste.com', password: '123456' },
+      { id: 'joao', name: 'João Silva', email: 'joao@teste.com', password: 'MinhaSenh@123' },
+      { id: 'maria', name: 'Maria Santos', email: 'maria@teste.com', password: 'OutraSenh@456' }
+    ];
+
+    for (const user of testUsers) {
+      try {
+        await this.sql`
+          INSERT INTO users (id, name, email, password_hash)
+          VALUES (${user.id}, ${user.name}, ${user.email}, ${user.password})
+          ON CONFLICT (email) DO NOTHING
+        `;
+      } catch (error) {
+        console.error(`Error creating user ${user.email}:`, error);
+      }
+    }
+  }
+
+  // Autenticação
+  async authenticateUser(email: string, password: string) {
+    await this.init();
+    
+    try {
+      const result = await this.sql`
+        SELECT id, name, email, password_hash
+        FROM users 
+        WHERE email = ${email} AND password_hash = ${password}
+      `;
+      
+      if (result.length > 0) {
+        const user = result[0];
+        return {
+          success: true,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email
+          }
+        };
+      } else {
+        return {
+          success: false,
+          error: 'Credenciais inválidas'
+        };
+      }
+    } catch (error) {
+      console.error('Authentication error:', error);
+      return {
+        success: false,
+        error: 'Erro interno do servidor'
+      };
     }
   }
 }
