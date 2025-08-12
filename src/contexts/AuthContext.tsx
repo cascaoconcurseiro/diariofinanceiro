@@ -30,18 +30,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Verificar se há usuário logado
   useEffect(() => {
     const checkAuth = () => {
-      const savedUser = localStorage.getItem('userData');
-      const savedToken = localStorage.getItem('token');
-      
-      if (savedUser && savedToken) {
-        const userData = JSON.parse(savedUser);
-        setUser(userData);
-        setToken(savedToken);
+      try {
+        const savedUser = localStorage.getItem('userData');
+        const savedToken = localStorage.getItem('token');
         
-        // ✅ INICIALIZAR SINCRONIZAÇÃO
-        syncService.setUserId(userData.id);
-        
-        console.log('✅ Login automático:', userData.name);
+        if (savedUser && savedToken) {
+          const userData = JSON.parse(savedUser);
+          setUser(userData);
+          setToken(savedToken);
+          syncService.setUserId(userData.id);
+        }
+      } catch (error) {
+        console.error('Erro ao verificar autenticação:', error);
+        // Limpar dados corrompidos
+        localStorage.removeItem('userData');
+        localStorage.removeItem('token');
       }
       setIsLoading(false);
     };
@@ -117,35 +120,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (email: string, password: string, name: string): Promise<boolean> => {
     try {
-      // ✅ Validação e sanitização
-      const cleanEmail = sanitizeEmail(email);
-      const cleanName = sanitizeInput(name);
-      
-      if (!validateEmail(cleanEmail) || !validatePassword(password) || !validateName(cleanName)) {
+      // Validação básica
+      if (!email || !password || !name || password.length < 6) {
         return false;
       }
       
-      // Tentar criar no Neon primeiro
-      const result = await neonDB.createUser(cleanEmail, password, cleanName);
+      // Tentar criar no Neon
+      const result = await neonDB.createUser(email, password, name);
       
       if (result.success && result.user) {
+        // Login automático após registro
         const userData = {
           id: result.user.id,
           email: result.user.email,
           name: result.user.name
         };
         
-        // Login automático após registro
         const token = `token_${result.user.id}`;
         setToken(token);
         setUser(userData);
         localStorage.setItem('token', token);
         localStorage.setItem('userData', JSON.stringify(userData));
         
-        // ✅ INICIALIZAR SINCRONIZAÇÃO
         syncService.setUserId(userData.id);
         
-        console.log('✅ Usuário registrado e logado:', cleanName);
+        console.log('✅ Registro realizado:', result.user.name);
         return true;
       } else {
         console.error('Erro no registro:', result.error);
@@ -153,7 +152,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (error) {
       console.error('Erro no registro:', error);
-      handleError(error, 'AuthContext.register');
       return false;
     }
   };

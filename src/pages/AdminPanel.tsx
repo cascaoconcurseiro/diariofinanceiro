@@ -283,6 +283,18 @@ const AdminPanel: React.FC = () => {
                 >
                   🧪 Testar Hash
                 </Button>
+                <Button 
+                  onClick={async () => {
+                    if (confirm('ATENÇÃO: Isso vai DELETAR TODOS os usuários e recriar apenas os de teste. Continuar?')) {
+                      const { neonDB } = await import('../services/neonDatabase');
+                      const success = await neonDB.resetDatabase();
+                      alert(success ? 'Banco resetado com sucesso!' : 'Erro ao resetar banco');
+                    }
+                  }}
+                  className="w-full bg-red-800 hover:bg-red-900 text-sm"
+                >
+                  🚨 RESET COMPLETO
+                </Button>
               </div>
             </CardContent>
           </Card>

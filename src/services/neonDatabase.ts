@@ -276,22 +276,19 @@ class NeonDatabase {
     }
   }
 
-  // Hash de senha DETERMINÍSTICO
+  // Hash de senha SIMPLES e DETERMINÍSTICO
   private hashPassword(password: string): string {
-    // Hash determinístico que sempre gera o mesmo resultado
-    const salt = 'FIXED_SALT_2024'; // Salt fixo para garantir consistência
-    let hash = 5381; // Valor inicial fixo
-    const combined = password + salt;
+    // Algoritmo simples mas determinístico
+    let hash = 0;
+    const str = password + 'SALT2024';
     
-    // Algoritmo djb2 - determinístico
-    for (let i = 0; i < combined.length; i++) {
-      hash = ((hash << 5) + hash) + combined.charCodeAt(i);
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
     }
     
-    // Garantir resultado positivo e formato consistente
-    const result = Math.abs(hash).toString(36).padStart(8, '0');
-    console.log(`🔑 Hash gerado para senha: ${result}`);
-    return result;
+    return Math.abs(hash).toString(16).padStart(8, '0');
   }
 
   // Comparação time-safe para senhas
@@ -305,7 +302,7 @@ class NeonDatabase {
     return result === 0;
   }
 
-  // Criar usuários de teste
+  // Criar usuários de teste - LIMPAR E RECRIAR
   async createTestUsers() {
     const testUsers = [
       { id: 'wesley', name: 'Wesley', email: 'wesley@teste.com', password: '123456' },
@@ -313,20 +310,28 @@ class NeonDatabase {
       { id: 'maria', name: 'Maria Santos', email: 'maria@teste.com', password: 'OutraSenh@456' }
     ];
 
+    // LIMPAR TODOS OS USUÁRIOS DE TESTE PRIMEIRO
+    for (const user of testUsers) {
+      try {
+        await this.sql`DELETE FROM users WHERE email = ${user.email}`;
+      } catch (error) {
+        // Ignorar erros de deleção
+      }
+    }
+
+    // RECRIAR COM HASH CORRETO
     for (const user of testUsers) {
       try {
         const hashedPassword = this.hashPassword(user.password);
-        console.log(`👤 Criando usuário teste: ${user.name} (Hash: ${hashedPassword})`);
-        
-        // Deletar se existir e recriar com novo hash
-        await this.sql`DELETE FROM users WHERE email = ${user.email}`;
         
         await this.sql`
           INSERT INTO users (id, name, email, password_hash, is_blocked)
           VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword}, FALSE)
         `;
+        
+        console.log(`✅ Usuário teste criado: ${user.name}`);
       } catch (error) {
-        console.error(`Error creating user ${user.email}:`, error);
+        console.error(`Erro ao criar ${user.email}:`, error);
       }
     }
   }
@@ -338,39 +343,58 @@ class NeonDatabase {
     console.log('✅ Usuários de teste recriados com sucesso!');
   }
 
+  // LIMPAR TUDO E RECOMEÇAR (para debug crítico)
+  async resetDatabase() {
+    try {
+      console.log('🚨 RESETANDO BANCO COMPLETO...');
+      
+      // Deletar TODOS os usuários
+      await this.sql`DELETE FROM users`;
+      
+      // Recriar usuários de teste
+      await this.createTestUsers();
+      
+      console.log('✅ BANCO RESETADO COM SUCESSO!');
+      return true;
+    } catch (error) {
+      console.error('Erro ao resetar banco:', error);
+      return false;
+    }
+  }
+
   // Testar hash de senha (para debug)
   testPasswordHash(password: string): string {
     const hash1 = this.hashPassword(password);
     const hash2 = this.hashPassword(password);
-    console.log(`🧪 Teste de consistência:`);
+    console.log(`🧪 Teste de consistência para '${password}':`);
     console.log(`Hash 1: ${hash1}`);
     console.log(`Hash 2: ${hash2}`);
     console.log(`Iguais: ${hash1 === hash2}`);
+    
+    // Testar com senhas dos usuários de teste
+    console.log('\n🔑 Hashes dos usuários de teste:');
+    console.log('123456 ->', this.hashPassword('123456'));
+    console.log('MinhaSenh@123 ->', this.hashPassword('MinhaSenh@123'));
+    console.log('OutraSenh@456 ->', this.hashPassword('OutraSenh@456'));
+    
     return hash1;
   }
 
-  // Criar novo usuário
+  // Criar novo usuário - VERSÃO CORRIGIDA
   async createUser(email: string, password: string, name: string): Promise<CreateUserResult> {
     await this.init();
     
-    // Validação de entrada
-    if (!validateEmail(email) || !validatePassword(password) || !validateName(name)) {
-      return {
-        success: false,
-        error: 'Dados inválidos'
-      };
-    }
-    
     try {
-      const sanitizedEmail = sanitizeInput(email.toLowerCase());
-      const sanitizedName = sanitizeInput(name);
+      const cleanEmail = email.toLowerCase().trim();
+      const cleanName = name.trim();
       
-      // Verificar se email já existe
+      // Verificar se email já existe - QUERY SIMPLES
       const existing = await this.sql`
-        SELECT id FROM users WHERE email = ${sanitizedEmail}
+        SELECT COUNT(*) as count FROM users WHERE LOWER(email) = ${cleanEmail}
       `;
       
-      if (existing.length > 0) {
+      if (existing[0].count > 0) {
+        console.log('❌ Email já existe:', cleanEmail);
         return {
           success: false,
           error: 'Email já cadastrado'
@@ -378,28 +402,28 @@ class NeonDatabase {
       }
       
       // Criar novo usuário
-      const userId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const userId = `user_${Date.now()}`;
       const hashedPassword = this.hashPassword(password);
-      console.log(`🆕 Criando usuário ${sanitizedName} com hash: ${hashedPassword}`);
       
       await this.sql`
         INSERT INTO users (id, name, email, password_hash, is_blocked)
-        VALUES (${userId}, ${sanitizedName}, ${sanitizedEmail}, ${hashedPassword}, FALSE)
+        VALUES (${userId}, ${cleanName}, ${cleanEmail}, ${hashedPassword}, FALSE)
       `;
       
+      console.log('✅ Usuário criado:', cleanName);
       return {
         success: true,
         user: {
           id: userId,
-          name: sanitizedName,
-          email: sanitizedEmail
+          name: cleanName,
+          email: cleanEmail
         }
       };
     } catch (error) {
-      console.error('Create user error:', error);
+      console.error('Erro ao criar usuário:', error);
       return {
         success: false,
-        error: 'Erro ao criar usuário'
+        error: 'Erro interno'
       };
     }
   }
@@ -410,43 +434,34 @@ class NeonDatabase {
     
     try {
       const hashedPassword = this.hashPassword(password);
-      console.log('🔐 Tentando login para:', email.substring(0, 3) + '***');
-      console.log('🔑 Hash da senha fornecida:', hashedPassword);
+      const cleanEmail = email.toLowerCase().trim();
       
-      // Primeiro verificar se o usuário existe
-      const userCheck = await this.sql`
+      // Buscar usuário
+      const users = await this.sql`
         SELECT id, name, email, password_hash, is_blocked
         FROM users 
-        WHERE email = ${email}
+        WHERE LOWER(email) = ${cleanEmail}
       `;
       
-      if (userCheck.length === 0) {
-        console.log('❌ Usuário não encontrado');
+      if (users.length === 0) {
         return {
           success: false,
           error: 'Email não cadastrado'
         };
       }
       
-      const user = userCheck[0];
-      console.log('👤 Usuário encontrado:', user.name);
-      console.log('🔑 Hash armazenado no banco:', user.password_hash);
+      const user = users[0];
       
-      // Verificar se usuário está bloqueado
+      // Verificar se bloqueado
       if (user.is_blocked) {
-        console.log('❌ Usuário bloqueado');
         return {
           success: false,
-          error: 'Usuário bloqueado. Contate o administrador.'
+          error: 'Usuário bloqueado'
         };
       }
       
-      // Comparação simples primeiro para debug
-      const hashMatch = user.password_hash === hashedPassword;
-      console.log('🔍 Hashes coincidem?', hashMatch);
-      
-      if (hashMatch) {
-        console.log('✅ Login realizado com sucesso');
+      // Verificar senha
+      if (user.password_hash === hashedPassword) {
         return {
           success: true,
           user: {
@@ -456,7 +471,6 @@ class NeonDatabase {
           }
         };
       } else {
-        console.log('❌ Credenciais inválidas - Hash não confere');
         return {
           success: false,
           error: 'Senha incorreta'
