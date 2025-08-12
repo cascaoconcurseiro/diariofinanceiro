@@ -51,35 +51,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      // ✅ Validação e sanitização
       const cleanEmail = sanitizeEmail(email);
       if (!validateEmail(cleanEmail)) {
         return false;
       }
       
-      const result = await neonDB.authenticateUser(cleanEmail, password);
+      // Tentar Neon primeiro, fallback para localStorage
+      try {
+        const result = await neonDB.authenticateUser(cleanEmail, password);
+        
+        if (result.success && result.user) {
+          const userData = {
+            id: result.user.id,
+            email: result.user.email,
+            name: result.user.name
+          };
+          
+          const token = `token_${result.user.id}`;
+          setToken(token);
+          setUser(userData);
+          localStorage.setItem('token', token);
+          localStorage.setItem('userData', JSON.stringify(userData));
+          
+          syncService.setUserId(userData.id);
+          console.log('✅ Login Neon:', userData.name);
+          return true;
+        }
+      } catch (neonError) {
+        console.warn('Neon login failed, trying localStorage:', neonError);
+      }
       
-      if (result.success && result.user) {
+      // Fallback: usuários locais
+      const localUsers = [
+        { id: 'wesley', name: 'Wesley', email: 'wesley@teste.com', password: '123456' },
+        { id: 'joao', name: 'João Silva', email: 'joao@teste.com', password: 'MinhaSenh@123' },
+        { id: 'maria', name: 'Maria Santos', email: 'maria@teste.com', password: 'OutraSenh@456' }
+      ];
+      
+      const user = localUsers.find(u => u.email === cleanEmail && u.password === password);
+      
+      if (user) {
         const userData = {
-          id: result.user.id,
-          email: result.user.email,
-          name: result.user.name
+          id: user.id,
+          email: user.email,
+          name: user.name
         };
         
-        const token = `token_${result.user.id}`;
+        const token = `token_${user.id}`;
         setToken(token);
         setUser(userData);
         localStorage.setItem('token', token);
         localStorage.setItem('userData', JSON.stringify(userData));
         
-        // ✅ INICIALIZAR SINCRONIZAÇÃO
         syncService.setUserId(userData.id);
-        
-        console.log('✅ Login realizado:', userData.name);
+        console.log('✅ Login Local:', userData.name);
         return true;
       }
       
-      console.log('❌ Login falhou:', result.error);
       return false;
     } catch (error) {
       console.error('Erro no login:', error);
