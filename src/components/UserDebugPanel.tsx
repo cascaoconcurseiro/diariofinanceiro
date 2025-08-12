@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { Bug, Database, Users, Sync } from 'lucide-react';
+import { Bug, Database, Users, RefreshCw } from 'lucide-react';
 import { accountsDB } from '../services/accountsDB';
 import { enterpriseDB } from '../utils/enterpriseDB';
 import { syncExistingUsers, forceSyncUser } from '../utils/userSync';
@@ -82,7 +82,7 @@ const UserDebugPanel: React.FC = () => {
               Recarregar
             </Button>
             <Button onClick={handleSyncAll} disabled={isLoading} variant="outline">
-              <Sync className="w-4 h-4 mr-2" />
+              <RefreshCw className="w-4 h-4 mr-2" />
               Sincronizar Todos
             </Button>
           </div>
