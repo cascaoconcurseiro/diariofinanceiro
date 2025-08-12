@@ -19,7 +19,8 @@ const RecurringTransactionManager: React.FC = () => {
     recurringTransactions,
     addRecurringTransaction,
     updateRecurringTransaction,
-    deleteRecurringTransaction, // CORRIGIDA
+    deleteRecurringComplete,
+    cancelRecurringTransaction,
     getActiveRecurringTransactions
   } = useRecurringTransactionManager();
 
@@ -63,16 +64,25 @@ const RecurringTransactionManager: React.FC = () => {
     }
   };
 
-  // CORREÇÃO: Função de exclusão que usa a lógica correta
-  const handleDelete = (id: string, deleteGeneratedTransactions: boolean = true) => {
+  // ✅ FUNÇÕES DE EXCLUSÃO OTIMIZADAS
+  const handleDeleteComplete = (id: string) => {
     try {
-      const result = deleteRecurringTransaction(id, deleteGeneratedTransactions);
-      
-      console.log('✅ MANAGER: Delete result:', result);
-      
+      const result = deleteRecurringComplete(id, true);
+      console.log('✅ MANAGER: Complete delete result:', result);
       return result;
     } catch (error) {
-      console.error('❌ MANAGER: Error deleting recurring transaction:', error);
+      console.error('❌ MANAGER: Error in complete delete:', error);
+      throw error;
+    }
+  };
+
+  const handleCancelRecurring = (id: string) => {
+    try {
+      const result = cancelRecurringTransaction(id);
+      console.log('✅ MANAGER: Cancel result:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ MANAGER: Error canceling recurring:', error);
       throw error;
     }
   };
@@ -104,7 +114,8 @@ const RecurringTransactionManager: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         onSave={handleSave}
         onUpdate={handleUpdate}
-        onDelete={handleDelete} // CORRIGIDA
+        onDeleteComplete={handleDeleteComplete}
+        onCancelRecurring={handleCancelRecurring}
         currentTransactions={recurringTransactions}
       />
     </div>

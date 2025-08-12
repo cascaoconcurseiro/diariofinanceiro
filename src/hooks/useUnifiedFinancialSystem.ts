@@ -5,6 +5,7 @@ import { syncService } from '../services/syncService';
 import { useAuth } from '../contexts/AuthContext';
 import { sanitizeInput, sanitizeAmount } from '../utils/security';
 import { backupSystem } from '../utils/backup';
+import { realTimeSync } from '../utils/realTimeSync';
 
 /**
  * SISTEMA FINANCEIRO SIMPLIFICADO
@@ -28,6 +29,9 @@ export const useUnifiedFinancialSystem = () => {
   useEffect(() => {
     const loadData = async () => {
       if (user && token) {
+        // ✅ CONFIGURAR SINCRONIZAÇÃO REAL-TIME
+        realTimeSync.setUserId(user.id);
+        
         // Usuário logado: buscar do servidor
         setIsSyncing(true);
         const serverTransactions = await syncService.fetchTransactions();
@@ -66,6 +70,29 @@ export const useUnifiedFinancialSystem = () => {
 
     loadData();
   }, [user, token]);
+
+  // ✅ ESCUTAR SINCRONIZAÇÃO REAL-TIME
+  useEffect(() => {
+    const handleRealTimeSync = (data: any) => {
+      if (data.type === 'transaction') {
+        if (data.action === 'add') {
+          setTransactions(prev => {
+            // Evitar duplicatas
+            const exists = prev.find(t => t.id === data.data.id);
+            if (exists) return prev;
+            return [...prev, data.data];
+          });
+        } else if (data.action === 'delete') {
+          setTransactions(prev => prev.filter(t => t.id !== data.data.id));
+        }
+      } else if (data.type === 'full_sync') {
+        setTransactions(data.data);
+        localStorage.setItem('unifiedFinancialData', JSON.stringify(data.data));
+      }
+    };
+
+    realTimeSync.onSync(handleRealTimeSync);
+  }, []);
 
   // Salvar dados no localStorage com backup
   useEffect(() => {
@@ -142,6 +169,9 @@ export const useUnifiedFinancialSystem = () => {
 
     setTransactions(prev => [...prev, newTransaction]);
     
+    // ✅ SINCRONIZAÇÃO REAL-TIME
+    realTimeSync.syncTransaction('add', newTransaction);
+    
     // Sincronizar com servidor se logado
     if (user && token && syncService.isOnline()) {
       syncService.createTransaction(newTransaction).catch(console.error);
@@ -159,6 +189,11 @@ export const useUnifiedFinancialSystem = () => {
       deleted = filtered.length !== prev.length;
       return filtered;
     });
+    
+    // ✅ SINCRONIZAÇÃO REAL-TIME
+    if (deleted) {
+      realTimeSync.syncTransaction('delete', { id });
+    }
     
     // Sincronizar com servidor se logado
     if (deleted && user && token && syncService.isOnline()) {

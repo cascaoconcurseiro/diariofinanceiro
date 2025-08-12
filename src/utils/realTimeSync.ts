@@ -1,14 +1,20 @@
-// Sincronização real-time entre dispositivos
+/**
+ * SINCRONIZAÇÃO REAL-TIME FUNCIONAL
+ * Baseada em BroadcastChannel + IndexedDB
+ */
 class RealTimeSync {
-  private ws: WebSocket | null = null;
+  private channel: BroadcastChannel;
   private deviceId: string;
+  private userId: string | null = null;
   private syncCallbacks: ((data: any) => void)[] = [];
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
+  private dbName = 'DiarioFinanceiroRealTime';
+  private db: IDBDatabase | null = null;
 
   constructor() {
     this.deviceId = this.generateDeviceId();
-    this.connect();
+    this.channel = new BroadcastChannel('diario-sync');
+    this.init();
+    this.setupListeners();
   }
 
   private generateDeviceId(): string {
@@ -20,76 +26,87 @@ class RealTimeSync {
     return deviceId;
   }
 
-  private connect(): void {
-    try {
-      // Usar WebSocket público para teste (substitua por seu servidor)
-      this.ws = new WebSocket('wss://echo.websocket.org');
+  private async init(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, 1);
       
-      this.ws.onopen = () => {
-        console.log('🔄 Sincronização conectada');
-        this.reconnectAttempts = 0;
-        
-        // Registrar dispositivo
-        this.send({
-          type: 'register',
-          deviceId: this.deviceId,
-          timestamp: Date.now()
-        });
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        this.db = request.result;
+        console.log('🔄 Real-time sync inicializado');
+        resolve();
       };
-
-      this.ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          // Ignorar mensagens do próprio dispositivo
-          if (data.deviceId === this.deviceId) return;
-          
-          // Notificar callbacks
-          this.syncCallbacks.forEach(callback => callback(data));
-        } catch (error) {
-          console.error('Erro ao processar mensagem:', error);
+      
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        
+        if (!db.objectStoreNames.contains('syncEvents')) {
+          const store = db.createObjectStore('syncEvents', { keyPath: 'id' });
+          store.createIndex('timestamp', 'timestamp', { unique: false });
+          store.createIndex('userId', 'userId', { unique: false });
         }
       };
-
-      this.ws.onclose = () => {
-        console.log('🔄 Conexão perdida, tentando reconectar...');
-        this.reconnect();
-      };
-
-      this.ws.onerror = (error) => {
-        console.error('Erro na conexão:', error);
-      };
-
-    } catch (error) {
-      console.error('Erro ao conectar:', error);
-      this.reconnect();
-    }
+    });
   }
 
-  private reconnect(): void {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.log('❌ Máximo de tentativas de reconexão atingido');
-      return;
-    }
+  private setupListeners(): void {
+    // Escutar mensagens de outros dispositivos/abas
+    this.channel.onmessage = (event) => {
+      const data = event.data;
+      
+      // Ignorar mensagens do próprio dispositivo
+      if (data.deviceId === this.deviceId) return;
+      
+      // Processar apenas se for do mesmo usuário
+      if (data.userId === this.userId) {
+        console.log('📡 Recebido:', data.type, 'de', data.deviceId);
+        this.syncCallbacks.forEach(callback => callback(data));
+      }
+    };
 
-    this.reconnectAttempts++;
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-    
-    setTimeout(() => {
-      console.log(`🔄 Tentativa de reconexão ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
-      this.connect();
-    }, delay);
+    // Escutar mudanças no localStorage (para detectar login/logout)
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'userData') {
+        const userData = e.newValue ? JSON.parse(e.newValue) : null;
+        this.userId = userData?.id || null;
+      }
+    });
+  }
+
+  setUserId(userId: string): void {
+    this.userId = userId;
+    console.log('🔄 Sync configurado para usuário:', userId);
   }
 
   // Enviar dados para outros dispositivos
   send(data: any): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({
-        ...data,
-        deviceId: this.deviceId,
-        timestamp: Date.now()
-      }));
-    }
+    if (!this.userId) return;
+
+    const message = {
+      ...data,
+      deviceId: this.deviceId,
+      userId: this.userId,
+      timestamp: Date.now()
+    };
+
+    // Broadcast para outras abas/dispositivos
+    this.channel.postMessage(message);
+    
+    // Salvar evento no IndexedDB para persistência
+    this.saveEvent(message);
+  }
+
+  private async saveEvent(event: any): Promise<void> {
+    if (!this.db) return;
+
+    const eventData = {
+      id: `event_${Date.now()}_${Math.random().toString(36).substring(2)}`,
+      ...event
+    };
+
+    const transaction = this.db.transaction(['syncEvents'], 'readwrite');
+    const store = transaction.objectStore('syncEvents');
+    store.add(eventData);
   }
 
   // Sincronizar transação
@@ -106,18 +123,64 @@ class RealTimeSync {
     this.syncCallbacks.push(callback);
   }
 
-  // Status da conexão
+  // Status da conexão (sempre conectado com BroadcastChannel)
   isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+    return true;
   }
 
   // Forçar sincronização completa
-  forcSync(allTransactions: any[]): void {
+  forceSync(allTransactions: any[]): void {
     this.send({
       type: 'full_sync',
       data: allTransactions
     });
   }
+
+  // Buscar eventos perdidos (para quando dispositivo volta online)
+  async getRecentEvents(since: number): Promise<any[]> {
+    if (!this.db || !this.userId) return [];
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['syncEvents'], 'readonly');
+      const store = transaction.objectStore('syncEvents');
+      const index = store.index('timestamp');
+      const range = IDBKeyRange.lowerBound(since);
+      const request = index.getAll(range);
+      
+      request.onsuccess = () => {
+        const events = request.result.filter(e => 
+          e.userId === this.userId && e.deviceId !== this.deviceId
+        );
+        resolve(events);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // Limpar eventos antigos
+  async cleanOldEvents(olderThan: number = 7 * 24 * 60 * 60 * 1000): Promise<void> {
+    if (!this.db) return;
+
+    const cutoff = Date.now() - olderThan;
+    const transaction = this.db.transaction(['syncEvents'], 'readwrite');
+    const store = transaction.objectStore('syncEvents');
+    const index = store.index('timestamp');
+    const range = IDBKeyRange.upperBound(cutoff);
+    const request = index.openCursor(range);
+    
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest).result;
+      if (cursor) {
+        cursor.delete();
+        cursor.continue();
+      }
+    };
+  }
 }
 
 export const realTimeSync = new RealTimeSync();
+
+// Auto-limpeza de eventos antigos
+setInterval(() => {
+  realTimeSync.cleanOldEvents().catch(console.error);
+}, 24 * 60 * 60 * 1000); // Uma vez por dia

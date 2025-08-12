@@ -9,6 +9,7 @@ export const useRecurringTransactionManager = () => {
     addRecurringTransaction,
     updateRecurringTransaction,
     deleteRecurringTransaction: deleteRecurringConfig,
+    cancelRecurringFromDate,
     getActiveRecurringTransactions
   } = useRecurringTransactions();
 
@@ -35,26 +36,16 @@ export const useRecurringTransactionManager = () => {
     return success;
   }, [transactions, deleteTransaction]);
 
-  // ✅ EXCLUSÃO COMPLETA (recorrente + todas as instâncias)
-  const deleteRecurringComplete = useCallback((recurringId: string): { recurringDeleted: boolean; transactionsDeleted: number } => {
-    // 1. Contar e deletar todas as transações geradas
-    const generatedTransactions = transactions.filter(t => t.recurringId === recurringId);
-    let deletedCount = 0;
+  // ✅ EXCLUSÃO COMPLETA (recorrente + todas as instâncias) - OTIMIZADA
+  const deleteRecurringComplete = useCallback((recurringId: string, deleteAll: boolean = true): { recurringDeleted: boolean; transactionsDeleted: number } => {
+    return deleteRecurringConfig(recurringId, deleteAll);
+  }, [deleteRecurringConfig]);
 
-    generatedTransactions.forEach(transaction => {
-      if (deleteTransaction(transaction.id)) {
-        deletedCount++;
-        console.log(`🗑️ Deleted generated: ${transaction.date} - ${transaction.description}`);
-      }
-    });
-
-    // 2. Deletar o recorrente original
-    const recurringDeleted = deleteRecurringConfig(recurringId);
-
-    console.log(`✅ Deleted recurring ${recurringId}: ${deletedCount} transactions removed`);
-    
-    return { recurringDeleted, transactionsDeleted: deletedCount };
-  }, [transactions, deleteTransaction, deleteRecurringConfig]);
+  // ✅ CANCELAR RECORRENTE (mantém lançamentos anteriores)
+  const cancelRecurringTransaction = useCallback((recurringId: string): { recurringCancelled: boolean; futureTransactionsRemoved: number } => {
+    const today = new Date().toISOString();
+    return cancelRecurringFromDate(recurringId, today);
+  }, [cancelRecurringFromDate]);
 
   // ✅ PAUSAR RECORRENTE (desativa sem deletar)
   const pauseRecurringTransaction = useCallback((recurringId: string): boolean => {
@@ -94,9 +85,10 @@ export const useRecurringTransactionManager = () => {
     updateRecurringTransaction,
     getActiveRecurringTransactions,
     
-    // Funções de exclusão (CORRIGIDAS)
+    // Funções de exclusão (OTIMIZADAS)
     deleteRecurringInstance,      // Remove só um mês
     deleteRecurringComplete,      // Remove tudo
+    cancelRecurringTransaction,   // Cancela mantendo histórico
     pauseRecurringTransaction,    // Pausa sem deletar
     resumeRecurringTransaction,   // Reativa
     

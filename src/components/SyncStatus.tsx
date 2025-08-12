@@ -1,84 +1,99 @@
-import React from 'react';
-import { Wifi, WifiOff, RefreshCw, Smartphone, Monitor } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
+import { Wifi, WifiOff, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { syncService } from '../services/syncService';
+import { realTimeSync } from '../utils/realTimeSync';
 
-interface SyncStatusProps {
-  status: 'connected' | 'disconnected' | 'syncing';
-  lastSync: Date | null;
-  onForceSync: () => void;
-  isConnected: boolean;
-}
+const SyncStatus: React.FC = () => {
+  const [syncStatus, setSyncStatus] = useState<any>({});
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [lastSync, setLastSync] = useState<number>(0);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-const SyncStatus: React.FC<SyncStatusProps> = ({ 
-  status, 
-  lastSync, 
-  onForceSync, 
-  isConnected 
-}) => {
-  const getStatusIcon = () => {
-    switch (status) {
-      case 'connected':
-        return <Wifi className="w-4 h-4 text-green-500" />;
-      case 'syncing':
-        return <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />;
-      default:
-        return <WifiOff className="w-4 h-4 text-red-500" />;
+  useEffect(() => {
+    const updateStatus = () => {
+      const status = syncService.getSyncStatus();
+      setSyncStatus(status);
+      setLastSync(status.lastSync);
+    };
+
+    updateStatus();
+    const interval = setInterval(updateStatus, 5000);
+
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const handleForceSync = async () => {
+    setIsSyncing(true);
+    try {
+      await syncService.forceSync();
+      const status = syncService.getSyncStatus();
+      setSyncStatus(status);
+      setLastSync(Date.now());
+    } catch (error) {
+      console.error('Erro na sincronização:', error);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
-  const getStatusText = () => {
-    switch (status) {
-      case 'connected':
-        return 'Sincronizado';
-      case 'syncing':
-        return 'Sincronizando...';
-      default:
-        return 'Desconectado';
-    }
+  const formatLastSync = (timestamp: number) => {
+    if (!timestamp) return 'Nunca';
+    
+    const now = Date.now();
+    const diff = now - timestamp;
+    
+    if (diff < 60000) return 'Agora mesmo';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}min atrás`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h atrás`;
+    return new Date(timestamp).toLocaleDateString();
   };
 
-  const getStatusColor = () => {
-    switch (status) {
-      case 'connected':
-        return 'text-green-600 bg-green-50 border-green-200';
-      case 'syncing':
-        return 'text-blue-600 bg-blue-50 border-blue-200';
-      default:
-        return 'text-red-600 bg-red-50 border-red-200';
-    }
+  const getSyncIcon = () => {
+    if (isSyncing) return <RefreshCw className="w-4 h-4 animate-spin" />;
+    if (!isOnline) return <WifiOff className="w-4 h-4 text-red-500" />;
+    if (lastSync && Date.now() - lastSync < 60000) return <Check className="w-4 h-4 text-green-500" />;
+    return <Wifi className="w-4 h-4 text-blue-500" />;
+  };
+
+  const getSyncColor = () => {
+    if (!isOnline) return 'text-red-600 bg-red-50';
+    if (lastSync && Date.now() - lastSync < 60000) return 'text-green-600 bg-green-50';
+    return 'text-blue-600 bg-blue-50';
   };
 
   return (
-    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${getStatusColor()}`}>
-      {getStatusIcon()}
+    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${getSyncColor()}`}>
+      {getSyncIcon()}
       
-      <div className="flex flex-col">
-        <span className="text-xs font-medium">{getStatusText()}</span>
-        {lastSync && (
-          <span className="text-xs opacity-75">
-            {lastSync.toLocaleTimeString('pt-BR', { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            })}
-          </span>
-        )}
-      </div>
-
-      <div className="flex items-center gap-1 ml-2">
-        <Smartphone className="w-3 h-3 opacity-60" />
-        <Monitor className="w-3 h-3 opacity-60" />
-      </div>
-
-      {isConnected && (
+      <span className="hidden sm:inline">
+        {!isOnline ? 'Offline' : `Sync: ${formatLastSync(lastSync)}`}
+      </span>
+      
+      {syncStatus.userId && (
         <Button
-          onClick={onForceSync}
-          variant="ghost"
           size="sm"
+          variant="ghost"
+          onClick={handleForceSync}
+          disabled={isSyncing || !isOnline}
           className="h-6 px-2 text-xs"
-          disabled={status === 'syncing'}
         >
-          <RefreshCw className="w-3 h-3" />
+          {isSyncing ? 'Sincronizando...' : 'Sync'}
         </Button>
+      )}
+      
+      {realTimeSync.isConnected() && (
+        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Real-time ativo" />
       )}
     </div>
   );

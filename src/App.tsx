@@ -14,8 +14,9 @@ import DatabaseAdmin from "./pages/DatabaseAdmin";
 import UserManagement from "./pages/UserManagement";
 import SystemLogs from "./pages/SystemLogs";
 import SystemSettings from "./pages/SystemSettings";
+import SecurityDashboard from "./pages/SecurityDashboard";
 import LoadingSpinner from "./components/LoadingSpinner";
-import SecurityDashboard from "./components/SecurityDashboard";
+
 
 const AppRoutes = () => {
   const { user, isLoading } = useAuth();
@@ -42,10 +43,10 @@ const AppRoutes = () => {
         <Route path="/system-logs" element={<SystemLogs />} />
         <Route path="/system-settings" element={<SystemSettings />} />
         <Route path="/database-admin" element={<DatabaseAdmin />} />
+        <Route path="/security-dashboard" element={<SecurityDashboard />} />
         <Route path="/sync-test" element={<SyncTest />} />
         <Route path="*" element={<Index />} />
       </Routes>
-      <SecurityDashboard />
     </>
   );
 };

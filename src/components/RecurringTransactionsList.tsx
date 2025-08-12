@@ -58,10 +58,16 @@ const RecurringTransactionsList: React.FC<RecurringTransactionsListProps> = ({
           {transactions.map((transaction) => (
             <div
               key={transaction.id}
-              className={`border rounded-lg p-4 ${
-                transaction.isActive ? 'bg-white' : 'bg-gray-50'
+              className={`border rounded-lg p-4 relative ${
+                transaction.isActive 
+                  ? 'bg-white border-green-200' 
+                  : 'bg-gray-50 border-gray-300 opacity-75'
               }`}
             >
+              {/* Indicador de Status */}
+              <div className={`absolute top-2 right-2 w-3 h-3 rounded-full ${
+                transaction.isActive ? 'bg-green-500' : 'bg-gray-400'
+              }`} title={transaction.isActive ? 'Ativo' : 'Pausado'} />
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
@@ -78,20 +84,33 @@ const RecurringTransactionsList: React.FC<RecurringTransactionsListProps> = ({
                       {formatCurrency(transaction.amount)}
                     </span>
                     <span className="text-gray-600">
-                      Dia {transaction.dayOfMonth}
+                      📅 Dia {transaction.dayOfMonth}
+                    </span>
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      transaction.isActive 
+                        ? 'bg-green-100 text-green-700' 
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {transaction.isActive ? '✅ Ativo' : '⏸️ Pausado'}
                     </span>
                   </div>
-                  <p className="text-gray-700 mb-1">{transaction.description}</p>
-                  <p className="text-sm text-gray-500">
-                    {getFrequencyLabel(transaction)}
+                  <p className="text-gray-700 mb-1 font-medium">{transaction.description}</p>
+                  <p className="text-sm text-gray-500 mb-2">
+                    🔄 {getFrequencyLabel(transaction)}
                   </p>
+                  {!transaction.isActive && (
+                    <p className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
+                      ⚠️ Pausado - não gerará novos lançamentos
+                    </p>
+                  )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => onEdit(transaction)}
                     className="text-blue-600 hover:text-blue-700"
+                    title="Editar recorrência"
                   >
                     <Edit className="w-4 h-4" />
                   </Button>
@@ -99,16 +118,20 @@ const RecurringTransactionsList: React.FC<RecurringTransactionsListProps> = ({
                     variant={transaction.isActive ? "outline" : "default"}
                     size="sm"
                     onClick={() => onToggleActive(transaction.id, transaction.isActive)}
+                    className={transaction.isActive ? "text-orange-600 hover:text-orange-700" : "text-green-600 hover:text-green-700"}
+                    title={transaction.isActive ? "Pausar recorrência" : "Reativar recorrência"}
                   >
-                    {transaction.isActive ? 'Pausar' : 'Ativar'}
+                    {transaction.isActive ? '⏸️ Pausar' : '▶️ Ativar'}
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => onDelete(transaction.id)}
                     className="text-red-600 hover:text-red-700"
+                    title="Cancelar ou excluir recorrência"
                   >
                     <Trash2 className="w-4 h-4" />
+                    Gerenciar
                   </Button>
                 </div>
               </div>

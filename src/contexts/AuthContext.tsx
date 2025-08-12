@@ -3,6 +3,7 @@ import { accountsDB } from '../services/accountsDB';
 import { sanitizeInput, sanitizeEmail, validateEmail, validatePassword, validateName } from '../utils/security';
 import { handleError } from '../utils/errorHandler';
 import { trackEvent, trackError } from '../utils/monitoring';
+import { syncService } from '../services/syncService';
 
 interface User {
   id: string;
@@ -35,6 +36,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (lastUser && savedToken) {
         setUser(lastUser);
         setToken(savedToken);
+        
+        // ✅ INICIALIZAR SINCRONIZAÇÃO
+        syncService.setUserId(lastUser.id);
+        
         console.log('✅ Login automático:', lastUser.name);
       }
       setIsLoading(false);
@@ -51,7 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
       
-      const account = accountsDB.login(cleanEmail, password);
+      const account = await accountsDB.login(cleanEmail, password);
       
       if (account) {
         const userData = {
@@ -65,12 +70,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(userData);
         localStorage.setItem('token', token);
         localStorage.setItem('userData', JSON.stringify(userData));
+        
+        // ✅ INICIALIZAR SINCRONIZAÇÃO
+        syncService.setUserId(userData.id);
+        
         trackEvent('login.success', { email: cleanEmail });
         return true;
       }
       trackEvent('login.failed', { email: cleanEmail });
       return false;
     } catch (error) {
+      console.error('Erro no login:', error);
       trackError('login.error', { email: cleanEmail });
       return false;
     }
@@ -86,7 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
       
-      const account = accountsDB.createAccount(cleanEmail, password, cleanName);
+      const account = await accountsDB.createAccount(cleanEmail, password, cleanName);
       
       const userData = {
         id: account.id,
@@ -101,8 +111,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('token', token);
       localStorage.setItem('userData', JSON.stringify(userData));
       
+      // ✅ INICIALIZAR SINCRONIZAÇÃO
+      syncService.setUserId(userData.id);
+      
+      console.log('✅ Usuário registrado e logado:', cleanName);
       return true;
     } catch (error) {
+      console.error('Erro no registro:', error);
       handleError(error, 'AuthContext.register');
       return false;
     }

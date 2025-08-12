@@ -19,10 +19,11 @@ import { Button } from '../components/ui/button';
 
 import { TransactionEntry } from '../types/transactions';
 import { useToast } from '../components/ui/use-toast';
-import { Zap, LogOut, Wifi, WifiOff } from 'lucide-react';
+import { Zap, LogOut } from 'lucide-react';
 import { formatCurrency } from '../utils/currencyUtils';
 import { useAuth } from '../contexts/AuthContext';
 import { format } from 'date-fns';
+import SyncStatus from '../components/SyncStatus';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -232,17 +233,7 @@ const Index = () => {
             <p className="text-sm sm:text-lg md:text-xl text-gray-600">Olá, {user?.name}!</p>
           </div>
           <div className="flex items-center gap-2">
-            {isSyncing ? (
-              <div className="flex items-center gap-1 text-blue-600">
-                <WifiOff className="w-4 h-4 animate-spin" />
-                <span className="text-xs">Sincronizando...</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1 text-green-600">
-                <Wifi className="w-4 h-4" />
-                <span className="text-xs">Online</span>
-              </div>
-            )}
+            <SyncStatus />
             <Button
               variant="outline"
               size="sm"

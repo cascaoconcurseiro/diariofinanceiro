@@ -35,7 +35,7 @@ class AccountsDB {
     }
   }
 
-  createAccount(email: string, password: string, name: string): Account {
+  async createAccount(email: string, password: string, name: string): Promise<Account> {
     const accounts = this.getAllAccounts();
     
     if (accounts.find(acc => acc.email === email)) {
@@ -43,7 +43,7 @@ class AccountsDB {
     }
 
     const newAccount: Account = {
-      id: Date.now().toString(),
+      id: `user_${Date.now()}_${Math.random().toString(36).substring(2)}`,
       email: email.toLowerCase().trim(),
       password: hashPassword(password), // ✅ Hash da senha
       name: name.trim(),
@@ -54,12 +54,42 @@ class AccountsDB {
     // ✅ Criptografar dados sensíveis
     const encryptedData = encryption.encrypt(JSON.stringify(accounts));
     localStorage.setItem(this.ACCOUNTS_KEY, encryptedData);
-    this.setLastUser(newAccount);
     
+    // ✅ SINCRONIZAR COM ENTERPRISE DB
+    try {
+      const { enterpriseDB } = await import('../utils/enterpriseDB');
+      await enterpriseDB.init();
+      
+      // Adicionar usuário ao enterpriseDB para aparecer no gerenciamento
+      const enterpriseUser = {
+        id: newAccount.id,
+        email: newAccount.email,
+        name: newAccount.name,
+        createdAt: newAccount.createdAt,
+        isActive: true,
+        loginAttempts: 0,
+        role: 'user' as const,
+        lastLogin: new Date().toISOString()
+      };
+      
+      const transaction = enterpriseDB['db']!.transaction(['users'], 'readwrite');
+      const store = transaction.objectStore('users');
+      await new Promise<void>((resolve, reject) => {
+        const request = store.add(enterpriseUser);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+      
+      console.log('✅ Usuário sincronizado com enterpriseDB:', newAccount.email);
+    } catch (error) {
+      console.warn('⚠️ Erro ao sincronizar com enterpriseDB:', error);
+    }
+    
+    this.setLastUser(newAccount);
     return newAccount;
   }
 
-  login(email: string, password: string): Account | null {
+  async login(email: string, password: string): Promise<Account | null> {
     const accounts = this.getAllAccounts();
     const account = accounts.find(acc => 
       acc.email === email.toLowerCase().trim() && 
@@ -68,6 +98,34 @@ class AccountsDB {
     
     if (account) {
       this.setLastUser(account);
+      
+      // ✅ ATUALIZAR ÚLTIMO LOGIN NO ENTERPRISE DB
+      try {
+        const { enterpriseDB } = await import('../utils/enterpriseDB');
+        await enterpriseDB.init();
+        await enterpriseDB.updateUser(account.id, { 
+          lastLogin: new Date().toISOString(),
+          loginAttempts: 0 // Reset tentativas em login bem-sucedido
+        });
+        console.log('✅ Login atualizado no enterpriseDB:', account.email);
+      } catch (error) {
+        console.warn('⚠️ Erro ao atualizar login no enterpriseDB:', error);
+      }
+    } else {
+      // ✅ INCREMENTAR TENTATIVAS DE LOGIN FALHADAS
+      try {
+        const { enterpriseDB } = await import('../utils/enterpriseDB');
+        await enterpriseDB.init();
+        const users = await enterpriseDB.getAllFromStore('users');
+        const user = users.find(u => u.email === email.toLowerCase().trim());
+        if (user) {
+          await enterpriseDB.updateUser(user.id, { 
+            loginAttempts: (user.loginAttempts || 0) + 1
+          });
+        }
+      } catch (error) {
+        console.warn('⚠️ Erro ao atualizar tentativas de login:', error);
+      }
     }
     
     return account || null;

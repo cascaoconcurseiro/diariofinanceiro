@@ -70,18 +70,76 @@ export const useRecurringTransactions = () => {
   const deleteRecurringTransaction = useCallback((id: string, deleteGeneratedTransactions: boolean = false): { recurringDeleted: boolean; transactionsDeleted: number } => {
     let transactionsDeleted = 0;
     
-    // Se deve deletar transações geradas, fazer isso primeiro
+    // Otimização: Deletar transações geradas de forma mais eficiente
     if (deleteGeneratedTransactions) {
-      const existingTransactions = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
-      const filteredTransactions = existingTransactions.filter((t: any) => t.recurringId !== id);
-      transactionsDeleted = existingTransactions.length - filteredTransactions.length;
-      localStorage.setItem('unifiedFinancialData', JSON.stringify(filteredTransactions));
+      try {
+        const existingTransactions = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
+        const initialCount = existingTransactions.length;
+        
+        // Filtrar usando índices para melhor performance
+        const filteredTransactions = [];
+        for (let i = 0; i < existingTransactions.length; i++) {
+          if (existingTransactions[i].recurringId !== id) {
+            filteredTransactions.push(existingTransactions[i]);
+          }
+        }
+        
+        transactionsDeleted = initialCount - filteredTransactions.length;
+        
+        // Salvar apenas se houve mudanças
+        if (transactionsDeleted > 0) {
+          localStorage.setItem('unifiedFinancialData', JSON.stringify(filteredTransactions));
+        }
+      } catch (error) {
+        console.error('Erro ao deletar transações geradas:', error);
+      }
     }
     
     // Deletar o recorrente
     setRecurringTransactions(prev => prev.filter(t => t.id !== id));
     
     return { recurringDeleted: true, transactionsDeleted };
+  }, []);
+
+  const cancelRecurringFromDate = useCallback((id: string, fromDate: string): { recurringCancelled: boolean; futureTransactionsRemoved: number } => {
+    let futureTransactionsRemoved = 0;
+    
+    try {
+      // Remover apenas lançamentos futuros
+      const existingTransactions = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
+      const fromDateObj = new Date(fromDate);
+      const initialCount = existingTransactions.length;
+      
+      const filteredTransactions = [];
+      for (let i = 0; i < existingTransactions.length; i++) {
+        const transaction = existingTransactions[i];
+        if (transaction.recurringId === id) {
+          const transactionDate = new Date(transaction.date);
+          // Manter apenas transações anteriores à data de cancelamento
+          if (transactionDate < fromDateObj) {
+            filteredTransactions.push(transaction);
+          }
+        } else {
+          filteredTransactions.push(transaction);
+        }
+      }
+      
+      futureTransactionsRemoved = initialCount - filteredTransactions.length;
+      
+      if (futureTransactionsRemoved > 0) {
+        localStorage.setItem('unifiedFinancialData', JSON.stringify(filteredTransactions));
+      }
+      
+      // Desativar o recorrente
+      setRecurringTransactions(prev => 
+        prev.map(t => t.id === id ? { ...t, isActive: false } : t)
+      );
+      
+    } catch (error) {
+      console.error('Erro ao cancelar recorrente:', error);
+    }
+    
+    return { recurringCancelled: true, futureTransactionsRemoved };
   }, []);
 
   const getActiveRecurringTransactions = useCallback((): RecurringTransaction[] => {
@@ -93,6 +151,7 @@ export const useRecurringTransactions = () => {
     addRecurringTransaction,
     updateRecurringTransaction,
     deleteRecurringTransaction,
+    cancelRecurringFromDate,
     getActiveRecurringTransactions
   };
 };

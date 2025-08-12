@@ -5,6 +5,7 @@ import { RecurringTransaction } from '../hooks/useRecurringTransactions';
 import { parseCurrency } from '../utils/currencyUtils';
 import RecurringTransactionsList from './RecurringTransactionsList';
 import RecurringTransactionForm from './RecurringTransactionForm';
+import RecurringDeleteConfirmation from './RecurringDeleteConfirmation';
 import { useToast } from './ui/use-toast';
 
 interface RecurringTransactionsModalProps {
@@ -12,7 +13,8 @@ interface RecurringTransactionsModalProps {
   onClose: () => void;
   onSave: (transaction: Omit<RecurringTransaction, 'id' | 'createdAt' | 'startDate'>) => void;
   onUpdate: (id: string, updates: Partial<RecurringTransaction>) => void;
-  onDelete: (id: string, deleteGeneratedTransactions?: boolean) => { recurringDeleted: boolean; transactionsDeleted: number };
+  onDeleteComplete: (id: string) => { recurringDeleted: boolean; transactionsDeleted: number };
+  onCancelRecurring: (id: string) => { recurringCancelled: boolean; futureTransactionsRemoved: number };
   currentTransactions: RecurringTransaction[];
 }
 
@@ -31,11 +33,14 @@ const RecurringTransactionsModal: React.FC<RecurringTransactionsModalProps> = ({
   onClose,
   onSave,
   onUpdate,
-  onDelete,
+  onDeleteComplete,
+  onCancelRecurring,
   currentTransactions
 }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<RecurringTransaction | null>(null);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<RecurringTransaction | null>(null);
   const { toast } = useToast();
 
   const handleSubmit = (data: FormData) => {
@@ -79,33 +84,51 @@ const RecurringTransactionsModal: React.FC<RecurringTransactionsModalProps> = ({
     onUpdate(id, { isActive: !isActive });
   };
 
-  // ✅ EXCLUSÃO COMPLETA: Recorrente + todas as instâncias
+  // ✅ SISTEMA DE EXCLUSÃO INTELIGENTE
   const handleDelete = (id: string) => {
     const transaction = currentTransactions.find(t => t.id === id);
     if (!transaction) return;
 
-    const confirmMessage = `Excluir completamente "${transaction.description}"?\n\n` +
-      `⚠️ ATENÇÃO: Isso removerá:\n` +
-      `• O lançamento recorrente\n` +
-      `• TODOS os lançamentos já gerados\n` +
-      `• Não gerará mais nos próximos meses\n\n` +
-      `Para pausar sem deletar, use "Pausar".`;
+    setTransactionToDelete(transaction);
+    setShowDeleteConfirmation(true);
+  };
 
-    if (window.confirm(confirmMessage)) {
-      try {
-        const result = onDelete(id, true);
-        
-        toast({
-          title: "Sucesso",
-          description: `Recorrente excluído! ${result.transactionsDeleted} lançamentos removidos.`,
-        });
-      } catch (error) {
-        toast({
-          title: "Erro",
-          description: "Falha ao excluir o lançamento recorrente.",
-          variant: "destructive"
-        });
-      }
+  const handleCancelRecurringConfirmed = () => {
+    if (!transactionToDelete) return;
+
+    try {
+      const result = onCancelRecurring(transactionToDelete.id);
+      
+      toast({
+        title: "Recorrência Cancelada",
+        description: `"${transactionToDelete.description}" cancelada. ${result.futureTransactionsRemoved} lançamentos futuros removidos.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Falha ao cancelar a recorrência.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteCompleteConfirmed = () => {
+    if (!transactionToDelete) return;
+
+    try {
+      const result = onDeleteComplete(transactionToDelete.id);
+      
+      toast({
+        title: "Exclusão Completa Realizada",
+        description: `Recorrente e ${result.transactionsDeleted} lançamentos removidos permanentemente.`,
+        variant: "destructive"
+      });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Falha na exclusão completa.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -135,6 +158,17 @@ const RecurringTransactionsModal: React.FC<RecurringTransactionsModalProps> = ({
             />
           )}
         </div>
+
+        <RecurringDeleteConfirmation
+          isOpen={showDeleteConfirmation}
+          onClose={() => {
+            setShowDeleteConfirmation(false);
+            setTransactionToDelete(null);
+          }}
+          transactionName={transactionToDelete?.description || ''}
+          onCancel={handleCancelRecurringConfirmed}
+          onDeleteComplete={handleDeleteCompleteConfirmed}
+        />
       </DialogContent>
     </Dialog>
   );
