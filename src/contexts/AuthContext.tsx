@@ -125,26 +125,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
       
-      const account = await accountsDB.createAccount(cleanEmail, password, cleanName);
+      // Tentar criar no Neon primeiro
+      const result = await neonDB.createUser(cleanEmail, password, cleanName);
       
-      const userData = {
-        id: account.id,
-        email: account.email,
-        name: account.name
-      };
-      
-      // Login automático após registro
-      const token = `token_${account.id}`;
-      setToken(token);
-      setUser(userData);
-      localStorage.setItem('token', token);
-      localStorage.setItem('userData', JSON.stringify(userData));
-      
-      // ✅ INICIALIZAR SINCRONIZAÇÃO
-      syncService.setUserId(userData.id);
-      
-      console.log('✅ Usuário registrado e logado:', cleanName);
-      return true;
+      if (result.success && result.user) {
+        const userData = {
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name
+        };
+        
+        // Login automático após registro
+        const token = `token_${result.user.id}`;
+        setToken(token);
+        setUser(userData);
+        localStorage.setItem('token', token);
+        localStorage.setItem('userData', JSON.stringify(userData));
+        
+        // ✅ INICIALIZAR SINCRONIZAÇÃO
+        syncService.setUserId(userData.id);
+        
+        console.log('✅ Usuário registrado e logado:', cleanName);
+        return true;
+      } else {
+        console.error('Erro no registro:', result.error);
+        return false;
+      }
     } catch (error) {
       console.error('Erro no registro:', error);
       handleError(error, 'AuthContext.register');

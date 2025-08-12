@@ -108,7 +108,7 @@ class NeonDatabase {
         ON user_settings(user_id)
       `;
 
-      // Inserir usuários de teste se não existirem
+      // Inserir usuários de teste (sempre recriar para garantir hash correto)
       await this.createTestUsers();
 
       this.initialized = true;
@@ -235,7 +235,15 @@ class NeonDatabase {
   // Hash de senha seguro
   private hashPassword(password: string): string {
     const salt = 'secure_salt_2024';
-    return btoa(password + salt).replace(/[^a-zA-Z0-9]/g, '').substring(0, 32);
+    // Usar um hash mais consistente
+    let hash = 0;
+    const combined = password + salt;
+    for (let i = 0; i < combined.length; i++) {
+      const char = combined.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(36).padStart(8, '0');
   }
 
   // Criar usuários de teste
@@ -249,14 +257,61 @@ class NeonDatabase {
     for (const user of testUsers) {
       try {
         const hashedPassword = this.hashPassword(user.password);
+        console.log(`👤 Criando usuário teste: ${user.email} com hash: ${hashedPassword}`);
+        
+        // Deletar se existir e recriar com novo hash
+        await this.sql`DELETE FROM users WHERE email = ${user.email}`;
+        
         await this.sql`
           INSERT INTO users (id, name, email, password_hash)
           VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword})
-          ON CONFLICT (email) DO NOTHING
         `;
       } catch (error) {
         console.error(`Error creating user ${user.email}:`, error);
       }
+    }
+  }
+
+  // Criar novo usuário
+  async createUser(email: string, password: string, name: string) {
+    await this.init();
+    
+    try {
+      // Verificar se email já existe
+      const existing = await this.sql`
+        SELECT id FROM users WHERE email = ${email}
+      `;
+      
+      if (existing.length > 0) {
+        return {
+          success: false,
+          error: 'Email já cadastrado'
+        };
+      }
+      
+      // Criar novo usuário
+      const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const hashedPassword = this.hashPassword(password);
+      
+      await this.sql`
+        INSERT INTO users (id, name, email, password_hash)
+        VALUES (${userId}, ${name}, ${email}, ${hashedPassword})
+      `;
+      
+      return {
+        success: true,
+        user: {
+          id: userId,
+          name: name,
+          email: email
+        }
+      };
+    } catch (error) {
+      console.error('Create user error:', error);
+      return {
+        success: false,
+        error: 'Erro ao criar usuário'
+      };
     }
   }
 
@@ -266,14 +321,28 @@ class NeonDatabase {
     
     try {
       const hashedPassword = this.hashPassword(password);
-      const result = await this.sql`
+      console.log('🔐 Tentando login:', { email, hashedPassword });
+      
+      // Primeiro verificar se o usuário existe
+      const userCheck = await this.sql`
         SELECT id, name, email, password_hash
         FROM users 
-        WHERE email = ${email} AND password_hash = ${hashedPassword}
+        WHERE email = ${email}
       `;
       
-      if (result.length > 0) {
-        const user = result[0];
+      if (userCheck.length === 0) {
+        console.log('❌ Usuário não encontrado:', email);
+        return {
+          success: false,
+          error: 'Email não cadastrado'
+        };
+      }
+      
+      const user = userCheck[0];
+      console.log('👤 Usuário encontrado:', { id: user.id, name: user.name, storedHash: user.password_hash });
+      
+      if (user.password_hash === hashedPassword) {
+        console.log('✅ Senha correta');
         return {
           success: true,
           user: {
@@ -283,9 +352,10 @@ class NeonDatabase {
           }
         };
       } else {
+        console.log('❌ Senha incorreta');
         return {
           success: false,
-          error: 'Credenciais inválidas'
+          error: 'Senha incorreta'
         };
       }
     } catch (error) {
