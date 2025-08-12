@@ -11,12 +11,13 @@ interface CloudData {
 }
 
 class SyncService {
-  private dbName = 'DiarioFinanceiroCloud';
-  private version = 1;
+  private dbName = 'DiarioFinanceiroCloudGlobal';
+  private version = 2;
   private db: IDBDatabase | null = null;
   private userId: string | null = null;
   private deviceId: string;
   private syncInterval: number | null = null;
+  private lastKnownDataHash: string = '';
 
   constructor() {
     this.deviceId = this.getDeviceId();
@@ -61,46 +62,77 @@ class SyncService {
   private startAutoSync(): void {
     if (this.syncInterval) clearInterval(this.syncInterval);
     
-    // Sincronizar a cada 30 segundos
-    this.syncInterval = window.setInterval(() => {
-      this.syncTransactions([]).catch(console.error);
-    }, 30000);
+    // Sincronizar a cada 3 segundos para detecção rápida
+    this.syncInterval = window.setInterval(async () => {
+      await this.checkForUpdates();
+    }, 3000);
+  }
+
+  private async checkForUpdates(): Promise<void> {
+    if (!this.userId) return;
+    
+    try {
+      const cloudData = await this.getCloudData(this.userId);
+      if (cloudData) {
+        const currentHash = this.hashData(cloudData.data);
+        
+        if (currentHash !== this.lastKnownDataHash) {
+          console.log('🔄 Detectadas mudanças na nuvem, sincronizando...');
+          localStorage.setItem('unifiedFinancialData', JSON.stringify(cloudData.data));
+          this.lastKnownDataHash = currentHash;
+          
+          // Disparar evento para atualizar UI
+          window.dispatchEvent(new CustomEvent('cloudDataUpdated', {
+            detail: { data: cloudData.data }
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao verificar atualizações:', error);
+    }
+  }
+
+  private hashData(data: any[]): string {
+    return btoa(JSON.stringify(data.map(t => t.id).sort())).substring(0, 20);
   }
 
   async syncTransactions(localTransactions: any[]): Promise<boolean> {
     if (!this.userId || !this.db) {
-      // Fallback para localStorage se não logado
       localStorage.setItem('unifiedFinancialData', JSON.stringify(localTransactions));
       return true;
     }
 
     try {
-      // 1. Salvar localmente sempre
-      localStorage.setItem('unifiedFinancialData', JSON.stringify(localTransactions));
-      
-      // 2. Buscar dados da "nuvem" (IndexedDB compartilhado)
+      // 1. Buscar dados atuais da nuvem
       const cloudData = await this.getCloudData(this.userId);
       
-      // 3. Fazer merge inteligente dos dados
+      // 2. Fazer merge inteligente
       let finalData = localTransactions;
       
-      if (cloudData && cloudData.data) {
-        // Merge: combinar dados locais e da nuvem
+      if (cloudData && cloudData.data && Array.isArray(cloudData.data)) {
         const cloudTransactions = cloudData.data;
-        const localIds = new Set(localTransactions.map(t => t.id));
+        const mergedMap = new Map();
+        
+        // Adicionar todas as transações locais
+        localTransactions.forEach(t => mergedMap.set(t.id, t));
         
         // Adicionar transações da nuvem que não existem localmente
-        const newFromCloud = cloudTransactions.filter(t => !localIds.has(t.id));
-        finalData = [...localTransactions, ...newFromCloud];
+        cloudTransactions.forEach(t => {
+          if (!mergedMap.has(t.id)) {
+            mergedMap.set(t.id, t);
+          }
+        });
         
-        console.log(`🔄 Merge: ${localTransactions.length} local + ${newFromCloud.length} da nuvem = ${finalData.length} total`);
+        finalData = Array.from(mergedMap.values());
+        console.log(`🔄 Merge: ${localTransactions.length} local + ${cloudTransactions.length} nuvem = ${finalData.length} final`);
       }
       
-      // 4. Salvar dados finais na nuvem e localmente
+      // 3. Salvar na nuvem e localmente
       await this.saveToCloud(this.userId, finalData);
       localStorage.setItem('unifiedFinancialData', JSON.stringify(finalData));
+      this.lastKnownDataHash = this.hashData(finalData);
       
-      console.log('☁️ Dados sincronizados com sucesso');
+      console.log('☁️ Sincronização completa');
       return true;
     } catch (error) {
       console.error('Erro na sincronização:', error);
@@ -145,19 +177,26 @@ class SyncService {
   }
 
   async createTransaction(transaction: any): Promise<any | null> {
-    const transactions = await this.fetchTransactions();
+    if (!this.userId) return transaction;
     
-    // Evitar duplicatas
-    const exists = transactions.find(t => t.id === transaction.id);
-    if (!exists) {
-      transactions.push(transaction);
-      await this.syncTransactions(transactions);
-      console.log('✅ Transação criada e sincronizada:', transaction.description);
-    } else {
-      console.log('⚠️ Transação já existe, ignorando duplicata');
+    try {
+      // Buscar dados atuais da nuvem
+      const cloudData = await this.getCloudData(this.userId);
+      const currentTransactions = cloudData?.data || [];
+      
+      // Verificar se já existe
+      const exists = currentTransactions.find(t => t.id === transaction.id);
+      if (!exists) {
+        const updatedTransactions = [...currentTransactions, transaction];
+        await this.saveToCloud(this.userId, updatedTransactions);
+        console.log('✅ Transação salva na nuvem:', transaction.description);
+      }
+      
+      return transaction;
+    } catch (error) {
+      console.error('Erro ao criar transação:', error);
+      return transaction;
     }
-    
-    return transaction;
   }
 
   async deleteTransaction(id: string): Promise<boolean> {

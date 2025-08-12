@@ -70,26 +70,17 @@ export const useUnifiedFinancialSystem = () => {
 
     loadData();
     
-    // ✅ POLLING PARA SINCRONIZAÇÃO ENTRE DISPOSITIVOS
-    const syncInterval = setInterval(async () => {
-      if (user && token) {
-        try {
-          const serverTransactions = await syncService.fetchTransactions();
-          const currentTransactions = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
-          
-          // Verificar se há diferenças
-          if (serverTransactions.length !== currentTransactions.length) {
-            console.log('🔄 Sincronizando dados entre dispositivos...');
-            setTransactions(serverTransactions);
-            localStorage.setItem('unifiedFinancialData', JSON.stringify(serverTransactions));
-          }
-        } catch (error) {
-          console.error('Erro na sincronização automática:', error);
-        }
-      }
-    }, 5000); // Verificar a cada 5 segundos
+    // ✅ ESCUTAR ATUALIZAÇÕES DA NUVEM
+    const handleCloudUpdate = (event: CustomEvent) => {
+      console.log('☁️ Dados atualizados na nuvem, recarregando...');
+      setTransactions(event.detail.data);
+    };
     
-    return () => clearInterval(syncInterval);
+    window.addEventListener('cloudDataUpdated', handleCloudUpdate as EventListener);
+    
+    return () => {
+      window.removeEventListener('cloudDataUpdated', handleCloudUpdate as EventListener);
+    };
   }, [user, token]);
 
   // ✅ ESCUTAR SINCRONIZAÇÃO REAL-TIME E STORAGE
@@ -215,10 +206,10 @@ export const useUnifiedFinancialSystem = () => {
     // ✅ SINCRONIZAÇÃO REAL-TIME
     realTimeSync.syncTransaction('add', newTransaction);
     
-    // ✅ SINCRONIZAÇÃO IMEDIATA COM SERVIDOR
-    if (user && token && syncService.isOnline()) {
+    // ✅ SINCRONIZAÇÃO IMEDIATA COM NUVEM
+    if (user && token) {
       syncService.createTransaction(newTransaction).then(() => {
-        console.log('✅ Transação sincronizada com servidor');
+        console.log('✅ Transação salva na nuvem');
       }).catch(console.error);
     }
     

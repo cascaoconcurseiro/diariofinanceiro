@@ -17,6 +17,7 @@ import SystemSettings from "./pages/SystemSettings";
 import SecurityDashboard from "./pages/SecurityDashboard";
 import LoadingSpinner from "./components/LoadingSpinner";
 import SyncNotification from "./components/SyncNotification";
+import { SyncDebugPanel } from "./components/SyncDebugPanel";
 
 
 const AppRoutes = () => {
@@ -49,6 +50,7 @@ const AppRoutes = () => {
         <Route path="*" element={<Index />} />
       </Routes>
       <SyncNotification />
+      <SyncDebugPanel />
     </>
   );
 };
