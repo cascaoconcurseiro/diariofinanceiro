@@ -19,6 +19,11 @@ export interface RecurringTransaction {
 
 const STORAGE_KEY = 'recurringTransactions';
 
+// Sanitiza string para logs seguros
+const sanitizeForLog = (str: string): string => {
+  return str.replace(/[\r\n\t]/g, '_').substring(0, 50);
+};
+
 export const useRecurringTransactions = () => {
   const { user } = useAuth();
   const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
@@ -67,7 +72,7 @@ export const useRecurringTransactions = () => {
     
     const newTransaction: RecurringTransaction = {
       ...transaction,
-      id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `rec_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       createdAt: now.toISOString(),
       startDate: nextMonth.toISOString()
     };
@@ -137,7 +142,7 @@ export const useRecurringTransactions = () => {
   const cancelRecurringFromDate = useCallback((id: string, fromDate: string): { recurringCancelled: boolean; futureTransactionsRemoved: number } => {
     let futureTransactionsRemoved = 0;
     
-    console.log(`⏸️ Cancelando recorrente ${id} a partir de ${fromDate}`);
+    console.log(`⏸️ Cancelando recorrente ${sanitizeForLog(id)} a partir de ${sanitizeForLog(fromDate)}`);
     
     try {
       // Remover apenas lançamentos futuros

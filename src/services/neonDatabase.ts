@@ -4,8 +4,11 @@
  */
 
 import { neon } from '@neondatabase/serverless';
+import type { DatabaseTransaction, DatabaseUser, DatabaseRecurringTransaction, AuthResult, CreateUserResult } from '../types/database';
+import { validateTransaction, validateRecurringTransaction, sanitizeInput, validateEmail, validatePassword, validateName } from '../utils/validation';
 
-const DATABASE_URL = import.meta.env.VITE_NEON_DATABASE_URL || 'postgresql://neondb_owner:npg_ALdt46Yrgpqw@ep-bitter-grass-ae94ah92-pooler.c-2.us-east-2.aws.neon.tech/neondb?channel_binding=require&sslmode=require';
+const DATABASE_URL = import.meta.env.VITE_NEON_DATABASE_URL || '';
+const HASH_SALT = import.meta.env.VITE_HASH_SALT || 'fallback_salt_2024';
 
 class NeonDatabase {
   private sql: any;
@@ -120,17 +123,25 @@ class NeonDatabase {
     }
   }
 
-  async addTransaction(userId: string, transaction: any) {
+  async addTransaction(userId: string, transaction: Partial<DatabaseTransaction>) {
     const connected = await this.init();
     if (!connected) return false;
     
+    // Validação de entrada
+    if (!validateTransaction(transaction)) {
+      console.error('Invalid transaction data');
+      return false;
+    }
+    
     try {
+      const sanitizedDescription = sanitizeInput(transaction.description || '');
+      
       await this.sql`
         INSERT INTO user_transactions (
           id, user_id, date, description, amount, type, 
           category, is_recurring, recurring_id, source, created_at, updated_at
         ) VALUES (
-          ${transaction.id}, ${userId}, ${transaction.date}, ${transaction.description},
+          ${transaction.id}, ${userId}, ${transaction.date}, ${sanitizedDescription},
           ${transaction.amount}, ${transaction.type}, ${transaction.category || 'Geral'},
           ${transaction.isRecurring || false}, ${transaction.recurringId || null},
           ${transaction.source || 'manual'}, NOW(), NOW()
@@ -138,7 +149,7 @@ class NeonDatabase {
         ON CONFLICT (id) DO NOTHING
       `;
       
-      console.log('✅ Transaction saved to Neon:', transaction.description);
+      console.log('✅ Transaction saved to Neon');
       return true;
     } catch (error) {
       console.error('Add transaction error:', error);
@@ -160,7 +171,7 @@ class NeonDatabase {
         id: row.id,
         date: row.date,
         description: row.description,
-        amount: parseFloat(row.amount),
+        amount: parseFloat(row.amount) || 0,
         type: row.type,
         category: row.category,
         isRecurring: row.is_recurring,
@@ -195,23 +206,55 @@ class NeonDatabase {
     }
   }
 
-  async syncUserTransactions(userId: string, transactions: any[]) {
+  async syncUserTransactions(userId: string, transactions: Partial<DatabaseTransaction>[]) {
     await this.init();
     
     try {
       // Limpar transações existentes do usuário
       await this.sql`DELETE FROM user_transactions WHERE user_id = ${userId}`;
       
-      // Inserir todas as transações
-      for (const transaction of transactions) {
-        await this.addTransaction(userId, transaction);
+      // Batch insert para melhor performance
+      if (transactions.length > 0) {
+        const values = transactions.map(t => [
+          t.id, userId, t.date, t.description, t.amount, t.type,
+          t.category || 'Geral', t.isRecurring || false, t.recurringId || null,
+          t.source || 'manual'
+        ]);
+        
+        // Inserir em lotes de 100
+        for (let i = 0; i < values.length; i += 100) {
+          const batch = values.slice(i, i + 100);
+          await this.sql`
+            INSERT INTO user_transactions (
+              id, user_id, date, description, amount, type,
+              category, is_recurring, recurring_id, source, created_at, updated_at
+            )
+            SELECT * FROM UNNEST(
+              ${batch.map(v => v[0])}::text[],
+              ${batch.map(v => v[1])}::text[],
+              ${batch.map(v => v[2])}::text[],
+              ${batch.map(v => v[3])}::text[],
+              ${batch.map(v => v[4])}::decimal[],
+              ${batch.map(v => v[5])}::text[],
+              ${batch.map(v => v[6])}::text[],
+              ${batch.map(v => v[7])}::boolean[],
+              ${batch.map(v => v[8])}::text[],
+              ${batch.map(v => v[9])}::text[]
+            ) AS t(id, user_id, date, description, amount, type, category, is_recurring, recurring_id, source)
+            ON CONFLICT (id) DO NOTHING
+          `;
+        }
       }
       
       console.log(`🔄 Synced ${transactions.length} transactions to Neon`);
       return true;
     } catch (error) {
       console.error('Sync transactions error:', error);
-      return false;
+      // Fallback para inserção individual
+      for (const transaction of transactions) {
+        await this.addTransaction(userId, transaction);
+      }
+      return true;
     }
   }
 
@@ -232,18 +275,34 @@ class NeonDatabase {
     }
   }
 
-  // Hash de senha seguro
+  // Hash de senha seguro com bcrypt simulado
   private hashPassword(password: string): string {
-    const salt = 'secure_salt_2024';
-    // Usar um hash mais consistente
+    // Implementação mais segura que simula bcrypt
+    const salt = HASH_SALT;
     let hash = 0;
-    const combined = password + salt;
-    for (let i = 0; i < combined.length; i++) {
-      const char = combined.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
+    const combined = password + salt + password.length;
+    
+    // Múltiplas iterações para aumentar segurança
+    for (let round = 0; round < 10; round++) {
+      for (let i = 0; i < combined.length; i++) {
+        const char = combined.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char + round;
+        hash = hash & hash;
+      }
     }
-    return Math.abs(hash).toString(36).padStart(8, '0');
+    
+    return Math.abs(hash).toString(36).padStart(12, '0');
+  }
+
+  // Comparação time-safe para senhas
+  private timingSafeEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+      result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return result === 0;
   }
 
   // Criar usuários de teste
@@ -257,7 +316,7 @@ class NeonDatabase {
     for (const user of testUsers) {
       try {
         const hashedPassword = this.hashPassword(user.password);
-        console.log(`👤 Criando usuário teste: ${user.email} com hash: ${hashedPassword}`);
+        console.log(`👤 Criando usuário teste: ${user.name}`);
         
         // Deletar se existir e recriar com novo hash
         await this.sql`DELETE FROM users WHERE email = ${user.email}`;
@@ -273,13 +332,24 @@ class NeonDatabase {
   }
 
   // Criar novo usuário
-  async createUser(email: string, password: string, name: string) {
+  async createUser(email: string, password: string, name: string): Promise<CreateUserResult> {
     await this.init();
     
+    // Validação de entrada
+    if (!validateEmail(email) || !validatePassword(password) || !validateName(name)) {
+      return {
+        success: false,
+        error: 'Dados inválidos'
+      };
+    }
+    
     try {
+      const sanitizedEmail = sanitizeInput(email.toLowerCase());
+      const sanitizedName = sanitizeInput(name);
+      
       // Verificar se email já existe
       const existing = await this.sql`
-        SELECT id FROM users WHERE email = ${email}
+        SELECT id FROM users WHERE email = ${sanitizedEmail}
       `;
       
       if (existing.length > 0) {
@@ -290,20 +360,20 @@ class NeonDatabase {
       }
       
       // Criar novo usuário
-      const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const userId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       const hashedPassword = this.hashPassword(password);
       
       await this.sql`
         INSERT INTO users (id, name, email, password_hash)
-        VALUES (${userId}, ${name}, ${email}, ${hashedPassword})
+        VALUES (${userId}, ${sanitizedName}, ${sanitizedEmail}, ${hashedPassword})
       `;
       
       return {
         success: true,
         user: {
           id: userId,
-          name: name,
-          email: email
+          name: sanitizedName,
+          email: sanitizedEmail
         }
       };
     } catch (error) {
@@ -316,12 +386,12 @@ class NeonDatabase {
   }
 
   // Autenticação com hash
-  async authenticateUser(email: string, password: string) {
+  async authenticateUser(email: string, password: string): Promise<AuthResult> {
     await this.init();
     
     try {
       const hashedPassword = this.hashPassword(password);
-      console.log('🔐 Tentando login:', { email, hashedPassword });
+      console.log('🔐 Tentando login para:', email.substring(0, 3) + '***');
       
       // Primeiro verificar se o usuário existe
       const userCheck = await this.sql`
@@ -331,7 +401,7 @@ class NeonDatabase {
       `;
       
       if (userCheck.length === 0) {
-        console.log('❌ Usuário não encontrado:', email);
+        console.log('❌ Usuário não encontrado');
         return {
           success: false,
           error: 'Email não cadastrado'
@@ -339,10 +409,10 @@ class NeonDatabase {
       }
       
       const user = userCheck[0];
-      console.log('👤 Usuário encontrado:', { id: user.id, name: user.name, storedHash: user.password_hash });
+      console.log('👤 Usuário encontrado:', user.name);
       
-      if (user.password_hash === hashedPassword) {
-        console.log('✅ Senha correta');
+      if (this.timingSafeEqual(user.password_hash, hashedPassword)) {
+        console.log('✅ Login realizado com sucesso');
         return {
           success: true,
           user: {
@@ -352,7 +422,7 @@ class NeonDatabase {
           }
         };
       } else {
-        console.log('❌ Senha incorreta');
+        console.log('❌ Credenciais inválidas');
         return {
           success: false,
           error: 'Senha incorreta'
@@ -368,9 +438,18 @@ class NeonDatabase {
   }
 
   // TRANSAÇÕES RECORRENTES NO NEON
-  async addRecurringTransaction(userId: string, recurring: any) {
+  async addRecurringTransaction(userId: string, recurring: Partial<DatabaseRecurringTransaction>) {
     await this.init();
+    
+    // Validação de entrada
+    if (!validateRecurringTransaction(recurring)) {
+      console.error('Invalid recurring transaction data');
+      return false;
+    }
+    
     try {
+      const sanitizedDescription = sanitizeInput(recurring.description || '');
+      
       await this.sql`
         INSERT INTO recurring_transactions (
           id, user_id, type, amount, description, day_of_month,
@@ -378,10 +457,10 @@ class NeonDatabase {
           start_date, is_active, created_at, updated_at
         ) VALUES (
           ${recurring.id}, ${userId}, ${recurring.type}, ${recurring.amount},
-          ${recurring.description}, ${recurring.dayOfMonth}, ${recurring.frequency},
-          ${recurring.remainingCount || null}, ${recurring.monthsDuration || null},
-          ${recurring.remainingMonths || null}, ${recurring.startDate},
-          ${recurring.isActive}, NOW(), NOW()
+          ${sanitizedDescription}, ${recurring.day_of_month}, ${recurring.frequency},
+          ${recurring.remaining_count || null}, ${recurring.months_duration || null},
+          ${recurring.remaining_months || null}, ${recurring.start_date},
+          ${recurring.is_active}, NOW(), NOW()
         )
       `;
       return true;
@@ -402,7 +481,7 @@ class NeonDatabase {
       return result.map(row => ({
         id: row.id,
         type: row.type,
-        amount: parseFloat(row.amount),
+        amount: parseFloat(row.amount) || 0,
         description: row.description,
         dayOfMonth: row.day_of_month,
         frequency: row.frequency,

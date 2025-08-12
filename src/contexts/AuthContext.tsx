@@ -81,12 +81,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('Neon login failed, trying localStorage:', neonError);
       }
       
-      // Fallback: usuários locais
-      const localUsers = [
+      // Fallback: usuários locais (apenas para desenvolvimento)
+      const localUsers = process.env.NODE_ENV === 'development' ? [
         { id: 'wesley', name: 'Wesley', email: 'wesley@teste.com', password: '123456' },
         { id: 'joao', name: 'João Silva', email: 'joao@teste.com', password: 'MinhaSenh@123' },
         { id: 'maria', name: 'Maria Santos', email: 'maria@teste.com', password: 'OutraSenh@456' }
-      ];
+      ] : [];
       
       const user = localUsers.find(u => u.email === cleanEmail && u.password === password);
       
