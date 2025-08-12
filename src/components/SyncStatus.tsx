@@ -73,17 +73,6 @@ const SyncStatus: React.FC = () => {
          isSyncing ? 'Sync...' :
          `${formatLastSync(lastSync)}`}
       </span>
-      
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={handleForceSync}
-        disabled={isSyncing}
-        className="h-6 px-2 text-xs bg-blue-50 hover:bg-blue-100"
-        title="Sincronizar"
-      >
-        🔄
-      </Button>
     </div>
   );
 };
