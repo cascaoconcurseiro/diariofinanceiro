@@ -137,10 +137,9 @@ const DayTransactionsModal: React.FC<DayTransactionsModalProps> = ({
       <div
         key={transaction.id}
         className={cn(
-          "flex items-center justify-between p-3 rounded-lg border transition-all hover:shadow-md cursor-pointer",
-          isRecurring ? "bg-orange-50 border-orange-200 hover:bg-orange-100" : "bg-white border-gray-200 hover:bg-gray-50"
+          "flex items-center justify-between p-3 rounded-lg border transition-all hover:shadow-md",
+          isRecurring ? "bg-orange-50 border-orange-200" : "bg-white border-gray-200"
         )}
-        onClick={() => handleEditTransaction(transaction)}
       >
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
@@ -158,7 +157,7 @@ const DayTransactionsModal: React.FC<DayTransactionsModalProps> = ({
             <p className="text-sm text-gray-600">{transaction.description}</p>
           )}
           <p className="text-xs text-gray-500 mt-1">
-            {isRecurring ? '💡 Clique para gerenciar este lançamento recorrente' : '💡 Clique para editar esta transação'}
+            {isRecurring ? '💡 Use o botão para gerenciar este lançamento recorrente' : '💡 Use o botão para editar esta transação'}
           </p>
         </div>
         <div className="flex items-center">

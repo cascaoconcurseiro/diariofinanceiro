@@ -201,17 +201,24 @@ export const useUnifiedFinancialSystem = () => {
       updatedAt: now
     };
 
-    setTransactions(prev => [...prev, newTransaction]);
+    // ✅ ATUALIZAR ESTADO IMEDIATAMENTE
+    setTransactions(prev => {
+      const updated = [...prev, newTransaction];
+      // Salvar no localStorage imediatamente
+      localStorage.setItem('unifiedFinancialData', JSON.stringify(updated));
+      return updated;
+    });
     
     // ✅ SINCRONIZAÇÃO REAL-TIME
     realTimeSync.syncTransaction('add', newTransaction);
     
-    // ✅ SINCRONIZAÇÃO IMEDIATA COM NUVEM
+    // ✅ SINCRONIZAÇÃO COM NUVEM (NÃO BLOQUEAR UI)
     if (user && token) {
-      syncService.createTransaction(newTransaction).then(() => {
-        console.log('✅ Transação salva na nuvem');
-      }).catch(console.error);
+      syncService.createTransaction(newTransaction).catch(console.error);
     }
+    
+    // ✅ DISPARAR EVENTO PARA ATUALIZAR OUTRAS ABAS
+    window.dispatchEvent(new Event('storage'));
     
     return id;
   }, [transactions, generateId]);

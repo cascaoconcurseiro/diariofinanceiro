@@ -7,6 +7,7 @@ const RecurringDebugPanel: React.FC = () => {
   const [recurringData, setRecurringData] = useState<any[]>([]);
   const [transactionData, setTransactionData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   const loadData = () => {
     setIsLoading(true);
@@ -29,8 +30,17 @@ const RecurringDebugPanel: React.FC = () => {
   };
 
   useEffect(() => {
-    loadData();
+    const handleShowDebug = () => {
+      setIsOpen(true);
+      loadData();
+    };
+    window.addEventListener('showRecurringDebug', handleShowDebug);
+    return () => window.removeEventListener('showRecurringDebug', handleShowDebug);
   }, []);
+
+  if (!isOpen) {
+    return null;
+  }
 
   const clearAllRecurring = () => {
     if (window.confirm('ATENÇÃO: Isso removerá TODOS os lançamentos recorrentes e suas transações geradas. Confirma?')) {
@@ -55,6 +65,21 @@ const RecurringDebugPanel: React.FC = () => {
   };
 
   return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <Bug className="w-5 h-5 text-orange-500" />
+            Debug - Lançamentos Recorrentes
+          </h2>
+          <Button
+            onClick={() => setIsOpen(false)}
+            variant="ghost"
+            size="sm"
+          >
+            ✕
+          </Button>
+        </div>
     <Card className="mb-4">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
@@ -160,6 +185,8 @@ const RecurringDebugPanel: React.FC = () => {
         </div>
       </CardContent>
     </Card>
+      </div>
+    </div>
   );
 };
 

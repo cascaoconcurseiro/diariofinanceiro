@@ -228,6 +228,41 @@ const AdminPanel: React.FC = () => {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Debug Panels */}
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-yellow-600" />
+                Debug & Diagnóstico
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 mb-4">
+                Ferramentas de debug para recorrentes e sync
+              </p>
+              <div className="space-y-2">
+                <Button 
+                  onClick={() => {
+                    const event = new CustomEvent('showRecurringDebug');
+                    window.dispatchEvent(event);
+                  }}
+                  className="w-full bg-yellow-600 hover:bg-yellow-700 text-sm"
+                >
+                  🔄 Debug Recorrentes
+                </Button>
+                <Button 
+                  onClick={() => {
+                    const event = new CustomEvent('showSyncDebug');
+                    window.dispatchEvent(event);
+                  }}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-sm"
+                >
+                  ☁️ Debug Sync
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

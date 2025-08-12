@@ -61,6 +61,7 @@ const Index = () => {
     addRecurringTransaction,
     updateRecurringTransaction,
     deleteRecurringComplete,
+    cancelRecurringTransaction,
     getActiveRecurringTransactions
   } = useRecurringTransactionManager();
 
@@ -438,7 +439,8 @@ const Index = () => {
           onClose={() => setShowRecurringModal(false)}
           onSave={addRecurringTransaction}
           onUpdate={updateRecurringTransaction}
-          onDelete={deleteRecurringComplete}
+          onDeleteComplete={deleteRecurringComplete}
+          onCancelRecurring={cancelRecurringTransaction}
           currentTransactions={recurringTransactions}
         />
 

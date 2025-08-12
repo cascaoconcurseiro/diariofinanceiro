@@ -38,16 +38,14 @@ export const SyncDebugPanel: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const handleShowDebug = () => setIsOpen(true);
+    window.addEventListener('showSyncDebug', handleShowDebug);
+    return () => window.removeEventListener('showSyncDebug', handleShowDebug);
+  }, []);
+
   if (!isOpen) {
-    return (
-      <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 right-4 bg-blue-500 text-white p-2 rounded-full shadow-lg z-50"
-        title="Debug Sync"
-      >
-        🔄
-      </button>
-    );
+    return null;
   }
 
   return (

@@ -11,8 +11,8 @@ interface CloudData {
 }
 
 class SyncService {
-  private dbName = 'DiarioFinanceiroCloudGlobal';
-  private version = 2;
+  private dbName = 'DiarioFinanceiroCloudSync';
+  private version = 3;
   private db: IDBDatabase | null = null;
   private userId: string | null = null;
   private deviceId: string;
@@ -62,10 +62,10 @@ class SyncService {
   private startAutoSync(): void {
     if (this.syncInterval) clearInterval(this.syncInterval);
     
-    // Sincronizar a cada 3 segundos para detecção rápida
+    // Sincronizar a cada 2 segundos para detecção ultra-rápida
     this.syncInterval = window.setInterval(async () => {
       await this.checkForUpdates();
-    }, 3000);
+    }, 2000);
   }
 
   private async checkForUpdates(): Promise<void> {
@@ -189,7 +189,13 @@ class SyncService {
       if (!exists) {
         const updatedTransactions = [...currentTransactions, transaction];
         await this.saveToCloud(this.userId, updatedTransactions);
-        console.log('✅ Transação salva na nuvem:', transaction.description);
+        
+        // Forçar atualização imediata em outros dispositivos
+        window.dispatchEvent(new CustomEvent('cloudDataUpdated', {
+          detail: { data: updatedTransactions }
+        }));
+        
+        console.log('✅ Transação salva e sincronizada:', transaction.description);
       }
       
       return transaction;

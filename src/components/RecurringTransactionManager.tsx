@@ -68,7 +68,7 @@ const RecurringTransactionManager: React.FC = () => {
   const handleDeleteComplete = (id: string) => {
     try {
       console.log('🗑️ MANAGER: Deletando completamente recorrente:', id);
-      const result = deleteRecurringConfig(id, true); // Usar função direta
+      const result = deleteRecurringComplete(id);
       console.log('✅ MANAGER: Complete delete result:', result);
       return result;
     } catch (error) {
@@ -81,7 +81,7 @@ const RecurringTransactionManager: React.FC = () => {
     try {
       console.log('⏸️ MANAGER: Cancelando recorrente:', id);
       const today = new Date().toISOString();
-      const result = cancelRecurringFromDate(id, today); // Usar função direta
+      const result = cancelRecurringTransaction(id);
       console.log('✅ MANAGER: Cancel result:', result);
       return result;
     } catch (error) {
