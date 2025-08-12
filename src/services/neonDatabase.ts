@@ -276,23 +276,22 @@ class NeonDatabase {
     }
   }
 
-  // Hash de senha seguro com bcrypt simulado
+  // Hash de senha DETERMINÍSTICO
   private hashPassword(password: string): string {
-    // Implementação mais segura que simula bcrypt
-    const salt = HASH_SALT;
-    let hash = 0;
-    const combined = password + salt + password.length;
+    // Hash determinístico que sempre gera o mesmo resultado
+    const salt = 'FIXED_SALT_2024'; // Salt fixo para garantir consistência
+    let hash = 5381; // Valor inicial fixo
+    const combined = password + salt;
     
-    // Múltiplas iterações para aumentar segurança
-    for (let round = 0; round < 10; round++) {
-      for (let i = 0; i < combined.length; i++) {
-        const char = combined.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char + round;
-        hash = hash & hash;
-      }
+    // Algoritmo djb2 - determinístico
+    for (let i = 0; i < combined.length; i++) {
+      hash = ((hash << 5) + hash) + combined.charCodeAt(i);
     }
     
-    return Math.abs(hash).toString(36).padStart(12, '0');
+    // Garantir resultado positivo e formato consistente
+    const result = Math.abs(hash).toString(36).padStart(8, '0');
+    console.log(`🔑 Hash gerado para senha: ${result}`);
+    return result;
   }
 
   // Comparação time-safe para senhas
@@ -339,6 +338,17 @@ class NeonDatabase {
     console.log('✅ Usuários de teste recriados com sucesso!');
   }
 
+  // Testar hash de senha (para debug)
+  testPasswordHash(password: string): string {
+    const hash1 = this.hashPassword(password);
+    const hash2 = this.hashPassword(password);
+    console.log(`🧪 Teste de consistência:`);
+    console.log(`Hash 1: ${hash1}`);
+    console.log(`Hash 2: ${hash2}`);
+    console.log(`Iguais: ${hash1 === hash2}`);
+    return hash1;
+  }
+
   // Criar novo usuário
   async createUser(email: string, password: string, name: string): Promise<CreateUserResult> {
     await this.init();
@@ -370,10 +380,11 @@ class NeonDatabase {
       // Criar novo usuário
       const userId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       const hashedPassword = this.hashPassword(password);
+      console.log(`🆕 Criando usuário ${sanitizedName} com hash: ${hashedPassword}`);
       
       await this.sql`
-        INSERT INTO users (id, name, email, password_hash)
-        VALUES (${userId}, ${sanitizedName}, ${sanitizedEmail}, ${hashedPassword})
+        INSERT INTO users (id, name, email, password_hash, is_blocked)
+        VALUES (${userId}, ${sanitizedName}, ${sanitizedEmail}, ${hashedPassword}, FALSE)
       `;
       
       return {
@@ -400,6 +411,7 @@ class NeonDatabase {
     try {
       const hashedPassword = this.hashPassword(password);
       console.log('🔐 Tentando login para:', email.substring(0, 3) + '***');
+      console.log('🔑 Hash da senha fornecida:', hashedPassword);
       
       // Primeiro verificar se o usuário existe
       const userCheck = await this.sql`
@@ -418,6 +430,7 @@ class NeonDatabase {
       
       const user = userCheck[0];
       console.log('👤 Usuário encontrado:', user.name);
+      console.log('🔑 Hash armazenado no banco:', user.password_hash);
       
       // Verificar se usuário está bloqueado
       if (user.is_blocked) {
@@ -428,7 +441,11 @@ class NeonDatabase {
         };
       }
       
-      if (this.timingSafeEqual(user.password_hash, hashedPassword)) {
+      // Comparação simples primeiro para debug
+      const hashMatch = user.password_hash === hashedPassword;
+      console.log('🔍 Hashes coincidem?', hashMatch);
+      
+      if (hashMatch) {
         console.log('✅ Login realizado com sucesso');
         return {
           success: true,
@@ -439,7 +456,7 @@ class NeonDatabase {
           }
         };
       } else {
-        console.log('❌ Credenciais inválidas');
+        console.log('❌ Credenciais inválidas - Hash não confere');
         return {
           success: false,
           error: 'Senha incorreta'

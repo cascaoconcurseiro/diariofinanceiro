@@ -270,6 +270,19 @@ const AdminPanel: React.FC = () => {
                 >
                   👥 Recriar Usuários Teste
                 </Button>
+                <Button 
+                  onClick={async () => {
+                    const { neonDB } = await import('../services/neonDatabase');
+                    const password = prompt('Digite uma senha para testar:');
+                    if (password) {
+                      const hash = neonDB.testPasswordHash(password);
+                      alert(`Hash gerado: ${hash}\nVerifique o console para detalhes.`);
+                    }
+                  }}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-sm"
+                >
+                  🧪 Testar Hash
+                </Button>
               </div>
             </CardContent>
           </Card>
