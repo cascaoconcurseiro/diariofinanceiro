@@ -3,8 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUnifiedFinancialSystem } from '../hooks/useUnifiedFinancialSystem';
 import { useReserveAndExpenses } from '../hooks/useReserveAndExpenses';
-import { useRecurringTransactionManager } from '../hooks/useRecurringTransactionManager';
-import { useRecurringProcessor } from '../hooks/useRecurringProcessor';
+import { useRecurringTransactions } from '../hooks/useRecurringTransactions';
 
 import SummaryCard from '../components/SummaryCard';
 import EmergencyReserveModal from '../components/EmergencyReserveModal';
@@ -60,12 +59,10 @@ const Index = () => {
     recurringTransactions,
     addRecurringTransaction,
     updateRecurringTransaction,
-    deleteRecurringComplete,
-    cancelRecurringTransaction,
-    getActiveRecurringTransactions
-  } = useRecurringTransactionManager();
-
-  const { processRecurringTransactions, clearMonthCache } = useRecurringProcessor();
+    deleteRecurringTransaction,
+    getActiveRecurringTransactions,
+    processRecurringTransactions
+  } = useRecurringTransactions();
 
   const [inputValues, setInputValues] = useState<{[key: string]: string}>({});
   const [showReserveModal, setShowReserveModal] = useState(false);
@@ -93,46 +90,32 @@ const Index = () => {
     setInputValues({});
   }, [selectedYear, selectedMonth]);
 
-  // Process recurring transactions when month changes - CORRIGIDO PARA SINCRONIZAÇÃO COMPLETA
+  // Process recurring transactions when month changes
   useEffect(() => {
-    console.log('🔄 Processing recurring transactions effect triggered');
-    
     const activeTransactions = getActiveRecurringTransactions();
     if (activeTransactions.length > 0) {
-      // CRÍTICO: Não limpar cache - deixar o sistema de controle decidir
-      // Usar setTimeout para evitar processamento múltiplo
-      const timeoutId = setTimeout(() => {
-        processRecurringTransactions(
-          activeTransactions,
-          selectedYear,
-          selectedMonth,
-          (year, month, day, type, amount, source = 'recurring') => {
-            // Create detailed transaction for recurring transactions
-            const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            const recurringTransaction = activeTransactions.find(t => t.type === type && t.amount === amount);
-            const description = recurringTransaction?.description || `${getFieldLabel(type)} Recorrente - ${formatCurrency(amount)}`;
-            
-            console.log(`🔄 Creating detailed recurring transaction: ${description} on ${dateString}`);
-            
-            addTransaction(
-              dateString,
-              description,
-              amount,
-              type,
-              undefined, // category
-              true, // isRecurring
-              recurringTransaction?.id, // recurringId
-              'recurring' // source
-            );
-          },
-          updateRecurringTransaction
-        );
-        
-        // Processamento concluído
-      }, 50); // Pequeno delay para evitar múltiplas execuções
-      
-      // Cleanup timeout se o componente for desmontado
-      return () => clearTimeout(timeoutId);
+      processRecurringTransactions(
+        activeTransactions,
+        selectedYear,
+        selectedMonth,
+        (year, month, day, type, amount) => {
+          const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const recurringTransaction = activeTransactions.find(t => t.type === type && t.amount === amount);
+          const description = recurringTransaction?.description || `${getFieldLabel(type)} Recorrente - ${formatCurrency(amount)}`;
+          
+          addTransaction(
+            dateString,
+            description,
+            amount,
+            type,
+            undefined,
+            true,
+            recurringTransaction?.id,
+            'recurring'
+          );
+        },
+        updateRecurringTransaction
+      );
     }
   }, [selectedYear, selectedMonth, processRecurringTransactions, addTransaction, updateRecurringTransaction, getActiveRecurringTransactions, formatCurrency, getFieldLabel]);
 
@@ -439,8 +422,8 @@ const Index = () => {
           onClose={() => setShowRecurringModal(false)}
           onSave={addRecurringTransaction}
           onUpdate={updateRecurringTransaction}
-          onDeleteComplete={deleteRecurringComplete}
-          onCancelRecurring={cancelRecurringTransaction}
+          onDeleteComplete={deleteRecurringTransaction}
+          onCancelRecurring={deleteRecurringTransaction}
           currentTransactions={recurringTransactions}
         />
 

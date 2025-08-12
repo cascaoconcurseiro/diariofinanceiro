@@ -8,7 +8,7 @@ import { TransactionEntry } from '../types/transactions';
 import { formatCurrency } from '../utils/currencyUtils';
 import { cn } from '@/lib/utils';
 import RecurringInstanceModal from './RecurringInstanceModal';
-import { useRecurringTransactionManager } from '../hooks/useRecurringTransactionManager';
+import { useUnifiedFinancialSystem } from '../hooks/useUnifiedFinancialSystem';
 
 interface DayTransactionsModalProps {
   isOpen: boolean;
@@ -34,7 +34,7 @@ const DayTransactionsModal: React.FC<DayTransactionsModalProps> = ({
   const [showRecurringModal, setShowRecurringModal] = useState(false);
   const [selectedRecurringTransaction, setSelectedRecurringTransaction] = useState<TransactionEntry | null>(null);
   
-  const { deleteRecurringInstance, isRecurringTransaction } = useRecurringTransactionManager();
+  const { deleteTransaction } = useUnifiedFinancialSystem();
 
   // SOLUÇÃO DEFINITIVA: Carregar transações IMEDIATAMENTE sem delay
   useEffect(() => {
@@ -108,7 +108,7 @@ const DayTransactionsModal: React.FC<DayTransactionsModalProps> = ({
 
   // Lidar com edição/exclusão de transações
   const handleEditTransaction = (transaction: TransactionEntry) => {
-    const isRecurring = isRecurringTransaction(transaction.id);
+    const isRecurring = transaction.isRecurring || transaction.source === 'recurring';
     
     if (isRecurring) {
       // Para recorrentes, mostrar modal de opções
@@ -121,23 +121,20 @@ const DayTransactionsModal: React.FC<DayTransactionsModalProps> = ({
   };
   
   const handleDeleteInstance = (transactionId: string) => {
-    console.log('🗑️ Deleting ONLY this instance:', transactionId);
+    console.log('🗑️ Deleting transaction:', transactionId);
     
-    // Usar deleteRecurringInstance que só remove a instância específica
-    const success = deleteRecurringInstance(transactionId);
+    // Usar deleteTransaction que remove a transação e atualiza o saldo
+    const success = deleteTransaction(transactionId);
     
     if (success) {
-      console.log('✅ Instance deleted successfully');
+      console.log('✅ Transaction deleted successfully');
       
       // Recarregar transações da data atual
       const dateString = format(selectedDate, 'yyyy-MM-dd');
       const updatedTransactions = getTransactionsByDate(dateString);
       setTransactions(updatedTransactions);
-      
-      // Forçar atualização da interface
-      window.dispatchEvent(new Event('storage'));
     } else {
-      console.error('❌ Failed to delete instance');
+      console.error('❌ Failed to delete transaction');
     }
   };
 
