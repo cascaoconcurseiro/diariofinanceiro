@@ -207,14 +207,18 @@ const QuickEntry = () => {
 
   const handleDelete = (id: string, transactionDate: string) => {
     console.log('🗑️ Deleting transaction:', id);
-    const deleteSuccess = deleteTransaction(id);
     
-    if (deleteSuccess) {
-      toast({
-        title: "Sucesso",
-        description: "Lançamento excluído com sucesso!"
-      });
-    } else {
+    try {
+      const deleteSuccess = deleteTransaction(id);
+      
+      if (deleteSuccess) {
+        toast({
+          title: "Sucesso",
+          description: "Lançamento excluído com sucesso!"
+        });
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
       toast({
         title: "Erro",
         description: "Falha ao excluir o lançamento.",

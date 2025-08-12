@@ -172,8 +172,12 @@ export const useUnifiedFinancialSystem = () => {
       deleted = filtered.length !== prev.length;
       
       if (deleted) {
+        console.log('✅ Transaction deleted from state:', id);
+        
         if (user && token) {
-          syncService.deleteTransaction(id);
+          syncService.deleteTransaction(id).catch(error => {
+            console.error('Sync delete error:', error);
+          });
         } else {
           localStorage.setItem('unifiedFinancialData', JSON.stringify(filtered));
         }
@@ -182,6 +186,7 @@ export const useUnifiedFinancialSystem = () => {
       return filtered;
     });
 
+    console.log('Delete result:', deleted ? 'SUCCESS' : 'NOT_FOUND');
     return deleted;
   }, [user, token]);
 
