@@ -150,12 +150,70 @@ export const useRecurringTransactions = () => {
     return recurringTransactions.filter(t => t.isActive);
   }, [recurringTransactions]);
 
+  const processRecurringTransactions = useCallback((
+    activeTransactions: RecurringTransaction[],
+    year: number,
+    month: number,
+    addToDay: (year: number, month: number, day: number, type: 'entrada' | 'saida', amount: number, source?: string) => void,
+    updateRecurringTransaction: (id: string, updates: Partial<RecurringTransaction>) => void
+  ) => {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth();
+    
+    const processedKey = `processed_${year}_${month}`;
+    
+    // Verificar se já processou este mês
+    if (sessionStorage.getItem(processedKey)) {
+      return;
+    }
+    
+    console.log(`🔄 Processing ${activeTransactions.length} recurring transactions for ${year}-${month + 1}`);
+    
+    activeTransactions.forEach(transaction => {
+      const { dayOfMonth, type, amount, frequency, remainingCount, remainingMonths, id } = transaction;
+      
+      // Ajustar dia para meses com menos dias
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const targetDay = Math.min(dayOfMonth, daysInMonth);
+      
+      // Só processar se for mês atual ou futuro
+      const isCurrentOrFuture = year > currentYear || (year === currentYear && month >= currentMonth);
+      
+      if (isCurrentOrFuture) {
+        console.log(`✅ Creating recurring transaction: ${type} ${amount} on day ${targetDay}`);
+        addToDay(year, month, targetDay, type, amount, 'recurring');
+        
+        // Atualizar contadores
+        if (frequency === 'fixed-count' && remainingCount !== undefined) {
+          const newCount = Math.max(0, remainingCount - 1);
+          const updates: Partial<RecurringTransaction> = { remainingCount: newCount };
+          if (newCount <= 0) {
+            updates.isActive = false;
+          }
+          updateRecurringTransaction(id, updates);
+        } else if (frequency === 'monthly-duration' && remainingMonths !== undefined) {
+          const newMonthsRemaining = Math.max(0, remainingMonths - 1);
+          const updates: Partial<RecurringTransaction> = { remainingMonths: newMonthsRemaining };
+          if (newMonthsRemaining <= 0) {
+            updates.isActive = false;
+          }
+          updateRecurringTransaction(id, updates);
+        }
+      }
+    });
+    
+    // Marcar como processado
+    sessionStorage.setItem(processedKey, 'true');
+  }, []);
+
   return {
     recurringTransactions,
     addRecurringTransaction,
     updateRecurringTransaction,
     deleteRecurringTransaction,
     cancelRecurringFromDate,
-    getActiveRecurringTransactions
+    getActiveRecurringTransactions,
+    processRecurringTransactions
   };
 };
