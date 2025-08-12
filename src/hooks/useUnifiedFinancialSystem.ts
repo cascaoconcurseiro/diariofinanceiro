@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TransactionEntry } from '../types/transactions';
 import { formatCurrency, parseCurrency } from '../utils/currencyUtils';
-import { firebaseSync } from '../services/firebaseSync';
+import { syncService } from '../services/syncService';
 import { useAuth } from '../contexts/AuthContext';
 import { sanitizeInput, sanitizeAmount } from '../utils/security';
 import { backupSystem } from '../utils/backup';
@@ -19,32 +19,29 @@ export const useUnifiedFinancialSystem = () => {
     setSelectedMonth(now.getMonth());
   }, []);
 
-  // Inicializar Firebase e carregar dados
+  // Inicializar sistema e carregar dados do usuário
   useEffect(() => {
-    const initFirebase = async () => {
+    const initSystem = async () => {
       if (user && token) {
         setIsSyncing(true);
         
-        const initialized = await firebaseSync.init();
-        if (initialized) {
-          firebaseSync.setUserId(user.id);
-          
-          firebaseSync.onDataChange((data) => {
-            console.log('🔥 Firebase data updated');
-            setTransactions(data);
-          });
-          
-          const saved = localStorage.getItem('unifiedFinancialData');
-          if (saved) {
-            const localTransactions = JSON.parse(saved);
-            if (Array.isArray(localTransactions) && localTransactions.length > 0) {
-              await firebaseSync.syncTransactions(localTransactions);
-            }
-          }
-        }
+        // Inicializar serviços
+        await syncService.init();
+        syncService.setUserId(user.id);
+        
+        // Carregar transações do usuário
+        const userTransactions = await syncService.loadUserTransactions();
+        setTransactions(userTransactions);
+        
+        // Escutar mudanças em tempo real
+        syncService.onDataChange((updatedTransactions) => {
+          console.log('🔄 Real-time update received');
+          setTransactions(updatedTransactions);
+        });
         
         setIsSyncing(false);
       } else {
+        // Usuário não logado - usar localStorage
         const saved = localStorage.getItem('unifiedFinancialData');
         if (saved) {
           const parsed = JSON.parse(saved);
@@ -55,16 +52,18 @@ export const useUnifiedFinancialSystem = () => {
       }
     };
 
-    initFirebase();
+    initSystem();
+
+    // Cleanup
+    return () => {
+      syncService.stop();
+    };
   }, [user, token]);
 
+  // Backup automático
   useEffect(() => {
-    if (transactions.length >= 0) {
-      localStorage.setItem('unifiedFinancialData', JSON.stringify(transactions));
-      
-      if (transactions.length > 0 && transactions.length % 10 === 0) {
-        backupSystem.createBackup(transactions);
-      }
+    if (transactions.length > 0 && transactions.length % 10 === 0) {
+      backupSystem.createBackup(transactions);
     }
   }, [transactions]);
 
@@ -83,6 +82,7 @@ export const useUnifiedFinancialSystem = () => {
     source: 'manual' | 'recurring' | 'quick-entry' = 'manual'
   ): string => {
     
+    // Verificar duplicatas para recorrentes
     if (isRecurring && recurringId) {
       const existing = transactions.find(t => 
         t.recurringId === recurringId && 
@@ -97,6 +97,7 @@ export const useUnifiedFinancialSystem = () => {
       }
     }
     
+    // Verificar data futura para recorrentes
     if (isRecurring) {
       const targetDate = new Date(date);
       const today = new Date();
@@ -125,17 +126,22 @@ export const useUnifiedFinancialSystem = () => {
       updatedAt: now
     };
 
+    // Atualizar estado local imediatamente
     setTransactions(prev => {
       const updated = [...prev, newTransaction];
-      localStorage.setItem('unifiedFinancialData', JSON.stringify(updated));
       
+      // Sincronizar com banco se logado
       if (user && token) {
-        firebaseSync.addTransaction(newTransaction);
+        syncService.addTransaction(newTransaction);
+      } else {
+        // Salvar localmente se não logado
+        localStorage.setItem('unifiedFinancialData', JSON.stringify(updated));
       }
       
       return updated;
     });
     
+    console.log('✅ Transaction added:', newTransaction.description);
     return id;
   }, [transactions, generateId, user, token]);
 
@@ -146,8 +152,12 @@ export const useUnifiedFinancialSystem = () => {
       const filtered = prev.filter(t => t.id !== id);
       deleted = filtered.length !== prev.length;
       
-      if (deleted && user && token) {
-        firebaseSync.syncTransactions(filtered);
+      if (deleted) {
+        if (user && token) {
+          syncService.deleteTransaction(id);
+        } else {
+          localStorage.setItem('unifiedFinancialData', JSON.stringify(filtered));
+        }
       }
       
       return filtered;
@@ -157,16 +167,8 @@ export const useUnifiedFinancialSystem = () => {
   }, [user, token]);
 
   const deleteRecurringInstance = useCallback((transactionId: string): boolean => {
-    let deleted = false;
-    
-    setTransactions(prev => {
-      const filtered = prev.filter(t => t.id !== transactionId);
-      deleted = filtered.length !== prev.length;
-      return filtered;
-    });
-    
-    return deleted;
-  }, []);
+    return deleteTransaction(transactionId);
+  }, [deleteTransaction]);
   
   const deleteAllRecurringTransactions = useCallback((recurringId: string): number => {
     let deletedCount = 0;
@@ -174,11 +176,21 @@ export const useUnifiedFinancialSystem = () => {
     setTransactions(prev => {
       const toDelete = prev.filter(t => t.recurringId === recurringId);
       deletedCount = toDelete.length;
-      return prev.filter(t => t.recurringId !== recurringId);
+      const filtered = prev.filter(t => t.recurringId !== recurringId);
+      
+      if (deletedCount > 0) {
+        if (user && token) {
+          syncService.syncAllTransactions(filtered);
+        } else {
+          localStorage.setItem('unifiedFinancialData', JSON.stringify(filtered));
+        }
+      }
+      
+      return filtered;
     });
     
     return deletedCount;
-  }, []);
+  }, [user, token]);
 
   const updateDayData = useCallback((
     year: number, 
@@ -190,6 +202,7 @@ export const useUnifiedFinancialSystem = () => {
     const amount = parseCurrency(value);
     const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
+    // Remover transações existentes para este dia/campo
     const existing = transactions.filter(t => 
       t.date === date && t.type === field && t.source === 'manual'
     );
@@ -198,6 +211,7 @@ export const useUnifiedFinancialSystem = () => {
       deleteTransaction(transaction.id);
     });
     
+    // Adicionar nova transação se valor > 0
     if (amount > 0) {
       addTransaction(
         date, 
@@ -235,6 +249,7 @@ export const useUnifiedFinancialSystem = () => {
     if (monthlyTotalsCache.has(cacheKey)) {
       return monthlyTotalsCache.get(cacheKey);
     }
+    
     const monthTransactions = transactions.filter(t => {
       const [tYear, tMonth] = t.date.split('-').map(Number);
       return tYear === year && tMonth === month + 1;
@@ -373,7 +388,7 @@ export const useUnifiedFinancialSystem = () => {
     syncWithServer: async () => {
       if (user && token) {
         setIsSyncing(true);
-        const success = await firebaseSync.syncTransactions(transactions);
+        const success = await syncService.syncAllTransactions(transactions);
         setIsSyncing(false);
         return success;
       }
