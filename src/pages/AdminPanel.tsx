@@ -86,7 +86,7 @@ const AdminPanel: React.FC = () => {
           <div className="flex items-center gap-4">
             <Button
               variant="outline"
-              onClick={() => window.history.back()}
+              onClick={() => navigate('/')}
               className="flex items-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
