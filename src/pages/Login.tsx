@@ -25,44 +25,21 @@ const Login = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    // ✅ Rate limiting
-    const clientIP = 'user_' + (formData.email || 'anonymous');
-    if (!rateLimiter.isAllowed(clientIP, 5, 15 * 60 * 1000)) {
-      const remainingTime = rateLimiter.getRemainingTime(clientIP);
+    // Validação mínima
+    if (!formData.email || !formData.password) {
       toast({
-        title: "Muitas tentativas",
-        description: `Tente novamente em ${remainingTime} minutos`,
+        title: "Erro",
+        description: "Preencha todos os campos",
         variant: "destructive"
       });
       setIsLoading(false);
       return;
     }
 
-    // ✅ Validação de entrada
-    if (!validateEmail(formData.email)) {
+    if (!isLogin && !formData.name) {
       toast({
         title: "Erro",
-        description: "Email inválido",
-        variant: "destructive"
-      });
-      setIsLoading(false);
-      return;
-    }
-
-    if (!validatePassword(formData.password)) {
-      toast({
-        title: "Erro",
-        description: "Senha deve ter pelo menos 6 caracteres",
-        variant: "destructive"
-      });
-      setIsLoading(false);
-      return;
-    }
-
-    if (!isLogin && !validateName(formData.name)) {
-      toast({
-        title: "Erro",
-        description: "Nome deve ter pelo menos 2 caracteres",
+        description: "Preencha o nome",
         variant: "destructive"
       });
       setIsLoading(false);

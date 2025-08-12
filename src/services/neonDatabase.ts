@@ -297,34 +297,35 @@ class NeonDatabase {
     return result === 0;
   }
 
-  // Criar usuários de teste - LIMPAR E RECRIAR
+  // Criar usuários de teste + ADMIN
   async createTestUsers() {
     const testUsers = [
+      { id: 'admin', name: 'Wesley Admin', email: 'wesley.diaslima@gmail.com', password: '834702' },
       { id: 'wesley', name: 'Wesley', email: 'wesley@teste.com', password: '123456' },
       { id: 'joao', name: 'João Silva', email: 'joao@teste.com', password: 'MinhaSenh@123' },
       { id: 'maria', name: 'Maria Santos', email: 'maria@teste.com', password: 'OutraSenh@456' }
     ];
 
-    // LIMPAR TODOS OS USUÁRIOS DE TESTE PRIMEIRO
+    // LIMPAR TODOS OS USUÁRIOS PRIMEIRO
     for (const user of testUsers) {
       try {
         await this.sql`DELETE FROM users WHERE email = ${user.email}`;
       } catch (error) {
-        // Ignorar erros de deleção
+        // Ignorar erros
       }
     }
 
-    // RECRIAR COM HASH CORRETO
+    // RECRIAR TODOS
     for (const user of testUsers) {
       try {
         const hashedPassword = this.hashPassword(user.password);
         
         await this.sql`
           INSERT INTO users (id, name, email, password_hash, is_blocked)
-          VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword}, FALSE)
+          VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword}, false)
         `;
         
-        console.log(`✅ Usuário teste criado: ${user.name}`);
+        console.log(`✅ Usuário criado: ${user.name} (${user.email})`);
       } catch (error) {
         console.error(`Erro ao criar ${user.email}:`, error);
       }

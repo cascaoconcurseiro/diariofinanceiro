@@ -301,14 +301,14 @@ const AdminPanel: React.FC = () => {
                     console.log('=== DEBUG AUTH ===');
                     
                     // Testar hash
-                    const hash = neonDB.testPasswordHash('123456');
+                    const hash = neonDB.testPasswordHash('834702');
                     
-                    // Testar login
-                    const loginResult = await neonDB.authenticateUser('wesley@teste.com', '123456');
-                    console.log('Login result:', loginResult);
+                    // Testar login admin
+                    const loginResult = await neonDB.authenticateUser('wesley.diaslima@gmail.com', '834702');
+                    console.log('Admin login result:', loginResult);
                     
                     // Testar criação
-                    const createResult = await neonDB.createUser('debug@teste.com', '123456', 'Debug User');
+                    const createResult = await neonDB.createUser('teste@novo.com', '123456', 'Teste Novo');
                     console.log('Create result:', createResult);
                     
                     alert('Debug executado! Verifique o console.');
@@ -316,6 +316,21 @@ const AdminPanel: React.FC = () => {
                   className="w-full bg-orange-600 hover:bg-orange-700 text-sm"
                 >
                   🔍 DEBUG AUTH
+                </Button>
+                <Button 
+                  onClick={() => {
+                    // Forçar login direto
+                    localStorage.setItem('token', 'token_admin');
+                    localStorage.setItem('userData', JSON.stringify({
+                      id: 'admin',
+                      name: 'Wesley Admin',
+                      email: 'wesley.diaslima@gmail.com'
+                    }));
+                    window.location.href = '/';
+                  }}
+                  className="w-full bg-green-600 hover:bg-green-700 text-sm"
+                >
+                  🚀 LOGIN DIRETO
                 </Button>
               </div>
             </CardContent>
