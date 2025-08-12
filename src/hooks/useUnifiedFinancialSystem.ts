@@ -69,9 +69,30 @@ export const useUnifiedFinancialSystem = () => {
     };
 
     loadData();
+    
+    // ✅ POLLING PARA SINCRONIZAÇÃO ENTRE DISPOSITIVOS
+    const syncInterval = setInterval(async () => {
+      if (user && token) {
+        try {
+          const serverTransactions = await syncService.fetchTransactions();
+          const currentTransactions = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
+          
+          // Verificar se há diferenças
+          if (serverTransactions.length !== currentTransactions.length) {
+            console.log('🔄 Sincronizando dados entre dispositivos...');
+            setTransactions(serverTransactions);
+            localStorage.setItem('unifiedFinancialData', JSON.stringify(serverTransactions));
+          }
+        } catch (error) {
+          console.error('Erro na sincronização automática:', error);
+        }
+      }
+    }, 5000); // Verificar a cada 5 segundos
+    
+    return () => clearInterval(syncInterval);
   }, [user, token]);
 
-  // ✅ ESCUTAR SINCRONIZAÇÃO REAL-TIME
+  // ✅ ESCUTAR SINCRONIZAÇÃO REAL-TIME E STORAGE
   useEffect(() => {
     const handleRealTimeSync = (data: any) => {
       if (data.type === 'transaction') {
@@ -91,7 +112,29 @@ export const useUnifiedFinancialSystem = () => {
       }
     };
 
+    // Escutar mudanças no localStorage (para exclusões de recorrentes)
+    const handleStorageChange = () => {
+      console.log('🔄 Storage changed, reloading transactions...');
+      const saved = localStorage.getItem('unifiedFinancialData');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            setTransactions(parsed);
+            console.log('✅ Transactions reloaded:', parsed.length);
+          }
+        } catch (error) {
+          console.error('Erro ao recarregar transações:', error);
+        }
+      }
+    };
+
     realTimeSync.onSync(handleRealTimeSync);
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   // Salvar dados no localStorage com backup
@@ -172,9 +215,11 @@ export const useUnifiedFinancialSystem = () => {
     // ✅ SINCRONIZAÇÃO REAL-TIME
     realTimeSync.syncTransaction('add', newTransaction);
     
-    // Sincronizar com servidor se logado
+    // ✅ SINCRONIZAÇÃO IMEDIATA COM SERVIDOR
     if (user && token && syncService.isOnline()) {
-      syncService.createTransaction(newTransaction).catch(console.error);
+      syncService.createTransaction(newTransaction).then(() => {
+        console.log('✅ Transação sincronizada com servidor');
+      }).catch(console.error);
     }
     
     return id;
@@ -193,6 +238,8 @@ export const useUnifiedFinancialSystem = () => {
     // ✅ SINCRONIZAÇÃO REAL-TIME
     if (deleted) {
       realTimeSync.syncTransaction('delete', { id });
+      // Forçar atualização da interface
+      window.dispatchEvent(new Event('storage'));
     }
     
     // Sincronizar com servidor se logado

@@ -6,6 +6,7 @@ import { parseCurrency } from '../utils/currencyUtils';
 import RecurringTransactionsList from './RecurringTransactionsList';
 import RecurringTransactionForm from './RecurringTransactionForm';
 import RecurringDeleteConfirmation from './RecurringDeleteConfirmation';
+import RecurringDebugPanel from './RecurringDebugPanel';
 import { useToast } from './ui/use-toast';
 
 interface RecurringTransactionsModalProps {
@@ -41,6 +42,7 @@ const RecurringTransactionsModal: React.FC<RecurringTransactionsModalProps> = ({
   const [editingTransaction, setEditingTransaction] = useState<RecurringTransaction | null>(null);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState<RecurringTransaction | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
   const { toast } = useToast();
 
   const handleSubmit = (data: FormData) => {
@@ -142,6 +144,19 @@ const RecurringTransactionsModal: React.FC<RecurringTransactionsModalProps> = ({
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* Botão de Debug */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowDebug(!showDebug)}
+              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded"
+            >
+              {showDebug ? 'Ocultar' : 'Debug'} 🔍
+            </button>
+          </div>
+
+          {/* Debug Panel */}
+          {showDebug && <RecurringDebugPanel />}
+
           <RecurringTransactionsList
             transactions={currentTransactions}
             onEdit={handleEdit}

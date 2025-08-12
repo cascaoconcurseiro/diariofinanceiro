@@ -36,10 +36,24 @@ const SyncStatus: React.FC = () => {
   const handleForceSync = async () => {
     setIsSyncing(true);
     try {
-      await syncService.forceSync();
+      console.log('🔄 Forçando sincronização manual...');
+      
+      // Buscar dados mais recentes
+      const serverData = await syncService.fetchTransactions();
+      const localData = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
+      
+      // Forçar sincronização
+      await syncService.syncTransactions(localData);
+      
+      // Atualizar status
       const status = syncService.getSyncStatus();
       setSyncStatus(status);
       setLastSync(Date.now());
+      
+      // Forçar atualização da interface
+      window.dispatchEvent(new Event('storage'));
+      
+      console.log('✅ Sincronização manual concluída');
     } catch (error) {
       console.error('Erro na sincronização:', error);
     } finally {
@@ -76,8 +90,10 @@ const SyncStatus: React.FC = () => {
     <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs ${getSyncColor()}`}>
       {getSyncIcon()}
       
-      <span className="hidden sm:inline">
-        {!isOnline ? 'Offline' : `Sync: ${formatLastSync(lastSync)}`}
+      <span className="hidden sm:inline text-xs">
+        {!isOnline ? 'Offline' : 
+         isSyncing ? 'Sincronizando...' :
+         `Último: ${formatLastSync(lastSync)}`}
       </span>
       
       {syncStatus.userId && (
@@ -85,10 +101,11 @@ const SyncStatus: React.FC = () => {
           size="sm"
           variant="ghost"
           onClick={handleForceSync}
-          disabled={isSyncing || !isOnline}
-          className="h-6 px-2 text-xs"
+          disabled={isSyncing}
+          className="h-6 px-2 text-xs bg-blue-50 hover:bg-blue-100"
+          title="Sincronizar manualmente entre dispositivos"
         >
-          {isSyncing ? 'Sincronizando...' : 'Sync'}
+          {isSyncing ? '🔄 Sync...' : '🔄 Sync'}
         </Button>
       )}
       

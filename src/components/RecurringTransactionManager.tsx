@@ -64,10 +64,11 @@ const RecurringTransactionManager: React.FC = () => {
     }
   };
 
-  // ✅ FUNÇÕES DE EXCLUSÃO OTIMIZADAS
+  // ✅ FUNÇÕES DE EXCLUSÃO CORRIGIDAS
   const handleDeleteComplete = (id: string) => {
     try {
-      const result = deleteRecurringComplete(id, true);
+      console.log('🗑️ MANAGER: Deletando completamente recorrente:', id);
+      const result = deleteRecurringConfig(id, true); // Usar função direta
       console.log('✅ MANAGER: Complete delete result:', result);
       return result;
     } catch (error) {
@@ -78,7 +79,9 @@ const RecurringTransactionManager: React.FC = () => {
 
   const handleCancelRecurring = (id: string) => {
     try {
-      const result = cancelRecurringTransaction(id);
+      console.log('⏸️ MANAGER: Cancelando recorrente:', id);
+      const today = new Date().toISOString();
+      const result = cancelRecurringFromDate(id, today); // Usar função direta
       console.log('✅ MANAGER: Cancel result:', result);
       return result;
     } catch (error) {

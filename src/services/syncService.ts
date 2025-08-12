@@ -81,20 +81,26 @@ class SyncService {
       // 2. Buscar dados da "nuvem" (IndexedDB compartilhado)
       const cloudData = await this.getCloudData(this.userId);
       
-      // 3. Se há dados na nuvem mais recentes, usar eles
-      if (cloudData && cloudData.lastModified > this.getLocalTimestamp()) {
-        localStorage.setItem('unifiedFinancialData', JSON.stringify(cloudData.data));
-        this.setLocalTimestamp(cloudData.lastModified);
-        console.log('🔄 Dados sincronizados da nuvem');
-        return true;
+      // 3. Fazer merge inteligente dos dados
+      let finalData = localTransactions;
+      
+      if (cloudData && cloudData.data) {
+        // Merge: combinar dados locais e da nuvem
+        const cloudTransactions = cloudData.data;
+        const localIds = new Set(localTransactions.map(t => t.id));
+        
+        // Adicionar transações da nuvem que não existem localmente
+        const newFromCloud = cloudTransactions.filter(t => !localIds.has(t.id));
+        finalData = [...localTransactions, ...newFromCloud];
+        
+        console.log(`🔄 Merge: ${localTransactions.length} local + ${newFromCloud.length} da nuvem = ${finalData.length} total`);
       }
       
-      // 4. Senão, enviar dados locais para nuvem
-      if (localTransactions.length > 0) {
-        await this.saveToCloud(this.userId, localTransactions);
-        console.log('☁️ Dados enviados para nuvem');
-      }
+      // 4. Salvar dados finais na nuvem e localmente
+      await this.saveToCloud(this.userId, finalData);
+      localStorage.setItem('unifiedFinancialData', JSON.stringify(finalData));
       
+      console.log('☁️ Dados sincronizados com sucesso');
       return true;
     } catch (error) {
       console.error('Erro na sincronização:', error);
@@ -110,19 +116,27 @@ class SyncService {
     }
 
     try {
-      // Tentar buscar da nuvem primeiro
+      // Buscar da nuvem primeiro
       const cloudData = await this.getCloudData(this.userId);
+      const localData = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
       
-      if (cloudData) {
-        // Salvar localmente e retornar
-        localStorage.setItem('unifiedFinancialData', JSON.stringify(cloudData.data));
-        this.setLocalTimestamp(cloudData.lastModified);
-        return cloudData.data;
+      if (cloudData && cloudData.data) {
+        // Verificar se dados da nuvem são mais recentes
+        const localTimestamp = this.getLocalTimestamp();
+        
+        if (cloudData.lastModified > localTimestamp) {
+          console.log('🔄 Dados da nuvem são mais recentes, usando eles');
+          localStorage.setItem('unifiedFinancialData', JSON.stringify(cloudData.data));
+          this.setLocalTimestamp(cloudData.lastModified);
+          return cloudData.data;
+        } else {
+          console.log('💾 Dados locais são mais recentes');
+          return localData;
+        }
       }
       
       // Se não há dados na nuvem, usar local
-      const saved = localStorage.getItem('unifiedFinancialData');
-      return saved ? JSON.parse(saved) : [];
+      return localData;
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
       const saved = localStorage.getItem('unifiedFinancialData');
@@ -132,8 +146,17 @@ class SyncService {
 
   async createTransaction(transaction: any): Promise<any | null> {
     const transactions = await this.fetchTransactions();
-    transactions.push(transaction);
-    await this.syncTransactions(transactions);
+    
+    // Evitar duplicatas
+    const exists = transactions.find(t => t.id === transaction.id);
+    if (!exists) {
+      transactions.push(transaction);
+      await this.syncTransactions(transactions);
+      console.log('✅ Transação criada e sincronizada:', transaction.description);
+    } else {
+      console.log('⚠️ Transação já existe, ignorando duplicata');
+    }
+    
     return transaction;
   }
 

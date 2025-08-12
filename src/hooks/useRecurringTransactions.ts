@@ -70,33 +70,37 @@ export const useRecurringTransactions = () => {
   const deleteRecurringTransaction = useCallback((id: string, deleteGeneratedTransactions: boolean = false): { recurringDeleted: boolean; transactionsDeleted: number } => {
     let transactionsDeleted = 0;
     
-    // Otimização: Deletar transações geradas de forma mais eficiente
+    console.log(`🗑️ Deletando recorrente ${id}, deleteGenerated: ${deleteGeneratedTransactions}`);
+    
+    // Deletar transações geradas se solicitado
     if (deleteGeneratedTransactions) {
       try {
         const existingTransactions = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
         const initialCount = existingTransactions.length;
         
-        // Filtrar usando índices para melhor performance
-        const filteredTransactions = [];
-        for (let i = 0; i < existingTransactions.length; i++) {
-          if (existingTransactions[i].recurringId !== id) {
-            filteredTransactions.push(existingTransactions[i]);
-          }
-        }
-        
+        // Filtrar transações que NÃO são deste recorrente
+        const filteredTransactions = existingTransactions.filter(t => t.recurringId !== id);
         transactionsDeleted = initialCount - filteredTransactions.length;
         
-        // Salvar apenas se houve mudanças
-        if (transactionsDeleted > 0) {
-          localStorage.setItem('unifiedFinancialData', JSON.stringify(filteredTransactions));
-        }
+        console.log(`🗑️ Removendo ${transactionsDeleted} transações geradas`);
+        
+        // Salvar sempre para garantir sincronização
+        localStorage.setItem('unifiedFinancialData', JSON.stringify(filteredTransactions));
+        
+        // Forçar atualização da interface
+        window.dispatchEvent(new Event('storage'));
+        
       } catch (error) {
         console.error('Erro ao deletar transações geradas:', error);
       }
     }
     
-    // Deletar o recorrente
-    setRecurringTransactions(prev => prev.filter(t => t.id !== id));
+    // Deletar o recorrente SEMPRE
+    setRecurringTransactions(prev => {
+      const filtered = prev.filter(t => t.id !== id);
+      console.log(`🗑️ Recorrente removido. Restam: ${filtered.length}`);
+      return filtered;
+    });
     
     return { recurringDeleted: true, transactionsDeleted };
   }, []);
@@ -104,36 +108,41 @@ export const useRecurringTransactions = () => {
   const cancelRecurringFromDate = useCallback((id: string, fromDate: string): { recurringCancelled: boolean; futureTransactionsRemoved: number } => {
     let futureTransactionsRemoved = 0;
     
+    console.log(`⏸️ Cancelando recorrente ${id} a partir de ${fromDate}`);
+    
     try {
       // Remover apenas lançamentos futuros
       const existingTransactions = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
       const fromDateObj = new Date(fromDate);
       const initialCount = existingTransactions.length;
       
-      const filteredTransactions = [];
-      for (let i = 0; i < existingTransactions.length; i++) {
-        const transaction = existingTransactions[i];
+      // Filtrar mantendo transações passadas e removendo futuras
+      const filteredTransactions = existingTransactions.filter(transaction => {
         if (transaction.recurringId === id) {
           const transactionDate = new Date(transaction.date);
           // Manter apenas transações anteriores à data de cancelamento
-          if (transactionDate < fromDateObj) {
-            filteredTransactions.push(transaction);
-          }
-        } else {
-          filteredTransactions.push(transaction);
+          return transactionDate < fromDateObj;
         }
-      }
+        // Manter todas as outras transações
+        return true;
+      });
       
       futureTransactionsRemoved = initialCount - filteredTransactions.length;
       
-      if (futureTransactionsRemoved > 0) {
-        localStorage.setItem('unifiedFinancialData', JSON.stringify(filteredTransactions));
-      }
+      console.log(`⏸️ Removendo ${futureTransactionsRemoved} lançamentos futuros`);
       
-      // Desativar o recorrente
+      // Salvar sempre para garantir sincronização
+      localStorage.setItem('unifiedFinancialData', JSON.stringify(filteredTransactions));
+      
+      // Forçar atualização da interface
+      window.dispatchEvent(new Event('storage'));
+      
+      // Desativar o recorrente (NÃO deletar)
       setRecurringTransactions(prev => 
         prev.map(t => t.id === id ? { ...t, isActive: false } : t)
       );
+      
+      console.log(`⏸️ Recorrente ${id} desativado`);
       
     } catch (error) {
       console.error('Erro ao cancelar recorrente:', error);
