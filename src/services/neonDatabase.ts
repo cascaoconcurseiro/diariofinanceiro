@@ -12,7 +12,9 @@ class NeonDatabase {
   private initialized = false;
 
   constructor() {
-    this.sql = neon(DATABASE_URL);
+    this.sql = neon(DATABASE_URL, {
+      disableWarningInBrowsers: true
+    });
   }
 
   async init() {
