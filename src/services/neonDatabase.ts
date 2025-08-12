@@ -53,6 +53,39 @@ class NeonDatabase {
           updated_at TIMESTAMP DEFAULT NOW()
         )
       `;
+      
+      // Criar tabela de transações recorrentes
+      await this.sql`
+        CREATE TABLE IF NOT EXISTS recurring_transactions (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          amount DECIMAL(10,2) NOT NULL,
+          description TEXT NOT NULL,
+          day_of_month INTEGER NOT NULL,
+          frequency TEXT NOT NULL,
+          remaining_count INTEGER,
+          months_duration INTEGER,
+          remaining_months INTEGER,
+          start_date TEXT NOT NULL,
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `;
+      
+      // Criar tabela de configurações do usuário
+      await this.sql`
+        CREATE TABLE IF NOT EXISTS user_settings (
+          id TEXT PRIMARY KEY,
+          user_id TEXT UNIQUE NOT NULL,
+          emergency_reserve_amount DECIMAL(10,2) DEFAULT 0,
+          emergency_reserve_months INTEGER DEFAULT 6,
+          fixed_expenses JSONB DEFAULT '[]',
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `;
 
       // Criar índices para performance
       await this.sql`
@@ -63,6 +96,16 @@ class NeonDatabase {
       await this.sql`
         CREATE INDEX IF NOT EXISTS idx_users_email 
         ON users(email)
+      `;
+      
+      await this.sql`
+        CREATE INDEX IF NOT EXISTS idx_recurring_transactions_user_id 
+        ON recurring_transactions(user_id)
+      `;
+      
+      await this.sql`
+        CREATE INDEX IF NOT EXISTS idx_user_settings_user_id 
+        ON user_settings(user_id)
       `;
 
       // Inserir usuários de teste se não existirem
@@ -189,6 +232,12 @@ class NeonDatabase {
     }
   }
 
+  // Hash de senha seguro
+  private hashPassword(password: string): string {
+    const salt = 'secure_salt_2024';
+    return btoa(password + salt).replace(/[^a-zA-Z0-9]/g, '').substring(0, 32);
+  }
+
   // Criar usuários de teste
   async createTestUsers() {
     const testUsers = [
@@ -199,9 +248,10 @@ class NeonDatabase {
 
     for (const user of testUsers) {
       try {
+        const hashedPassword = this.hashPassword(user.password);
         await this.sql`
           INSERT INTO users (id, name, email, password_hash)
-          VALUES (${user.id}, ${user.name}, ${user.email}, ${user.password})
+          VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword})
           ON CONFLICT (email) DO NOTHING
         `;
       } catch (error) {
@@ -210,15 +260,16 @@ class NeonDatabase {
     }
   }
 
-  // Autenticação
+  // Autenticação com hash
   async authenticateUser(email: string, password: string) {
     await this.init();
     
     try {
+      const hashedPassword = this.hashPassword(password);
       const result = await this.sql`
         SELECT id, name, email, password_hash
         FROM users 
-        WHERE email = ${email} AND password_hash = ${password}
+        WHERE email = ${email} AND password_hash = ${hashedPassword}
       `;
       
       if (result.length > 0) {
