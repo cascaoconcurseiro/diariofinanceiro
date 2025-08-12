@@ -276,14 +276,15 @@ class NeonDatabase {
     }
   }
 
-  // Hash ULTRA SIMPLES - apenas para funcionar
-  private hashPassword(password: string): string {
-    // Hash mais simples possível
+  // Hash ULTRA SIMPLES - público para debug
+  hashPassword(password: string): string {
     let hash = 0;
     for (let i = 0; i < password.length; i++) {
       hash += password.charCodeAt(i) * (i + 1);
     }
-    return hash.toString();
+    const result = hash.toString();
+    console.log(`HASH DEBUG: '${password}' -> '${result}'`);
+    return result;
   }
 
   // Comparação time-safe para senhas
@@ -433,12 +434,21 @@ class NeonDatabase {
         return { success: false, error: 'Usuário bloqueado' };
       }
       
+      console.log('=== DEBUG LOGIN ===');
+      console.log('Email:', cleanEmail);
+      console.log('Senha digitada:', password);
+      console.log('Hash calculado:', hashedPassword);
+      console.log('Hash no banco:', user.password_hash);
+      console.log('Match?', user.password_hash === hashedPassword);
+      
       if (user.password_hash === hashedPassword) {
+        console.log('✅ LOGIN SUCESSO');
         return {
           success: true,
           user: { id: user.id, name: user.name, email: user.email }
         };
       } else {
+        console.log('❌ LOGIN FALHOU');
         return { success: false, error: 'Senha incorreta' };
       }
     } catch (error) {
