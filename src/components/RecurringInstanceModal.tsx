@@ -25,17 +25,25 @@ const RecurringInstanceModal: React.FC<RecurringInstanceModalProps> = ({
   const transactionDate = new Date(transaction.date);
 
   const handleDeleteInstance = () => {
-    const confirmMessage = `Excluir APENAS o lançamento de ${format(transactionDate, "dd/MM/yyyy")}?\n\n` +
-      `"${transaction.description}" - ${formatCurrency(transaction.amount)}\n\n` +
-      `✅ O que acontecerá:\n` +
-      `• Remove APENAS este mês (${format(transactionDate, "MM/yyyy")})\n` +
-      `• Outros meses permanecem normais\n` +
-      `• Recorrente continua ativo\n\n` +
-      `⚠️ Para excluir TUDO, use "Gerenciar Recorrente".`;
+    const confirmMessage = `🗑️ EXCLUIR APENAS ESTE LANÇAMENTO?\n\n` +
+      `Data: ${format(transactionDate, "dd/MM/yyyy")}\n` +
+      `Descrição: "${transaction.description}"\n` +
+      `Valor: ${formatCurrency(transaction.amount)}\n\n` +
+      `✅ CONFIRME O QUE VAI ACONTECER:\n` +
+      `• Remove APENAS este lançamento de ${format(transactionDate, "dd/MM/yyyy")}\n` +
+      `• Outros meses do recorrente PERMANECEM\n` +
+      `• O lançamento recorrente continua ATIVO\n` +
+      `• Próximos meses continuarão sendo gerados\n\n` +
+      `⚠️ Se quiser excluir TUDO (recorrente + todos os lançamentos),\n` +
+      `cancele e use "Gerenciar Lançamento Recorrente".\n\n` +
+      `Confirma a exclusão APENAS deste lançamento?`;
 
     if (window.confirm(confirmMessage)) {
+      console.log('🗑️ User confirmed: Delete ONLY this instance');
       onDeleteInstance(transaction.id);
       onClose();
+    } else {
+      console.log('❌ User cancelled deletion');
     }
   };
 

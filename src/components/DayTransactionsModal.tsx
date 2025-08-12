@@ -121,12 +121,23 @@ const DayTransactionsModal: React.FC<DayTransactionsModalProps> = ({
   };
   
   const handleDeleteInstance = (transactionId: string) => {
+    console.log('🗑️ Deleting ONLY this instance:', transactionId);
+    
+    // Usar deleteRecurringInstance que só remove a instância específica
     const success = deleteRecurringInstance(transactionId);
+    
     if (success) {
-      // Recarregar transações
+      console.log('✅ Instance deleted successfully');
+      
+      // Recarregar transações da data atual
       const dateString = format(selectedDate, 'yyyy-MM-dd');
       const updatedTransactions = getTransactionsByDate(dateString);
       setTransactions(updatedTransactions);
+      
+      // Forçar atualização da interface
+      window.dispatchEvent(new Event('storage'));
+    } else {
+      console.error('❌ Failed to delete instance');
     }
   };
 
