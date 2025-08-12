@@ -67,27 +67,19 @@ export const useRecurringTransactions = () => {
     );
   }, []);
 
-  const deleteRecurringTransaction = useCallback((id: string, deleteGeneratedTransactions: boolean = false): { recurringDeleted: boolean; transactionsDeleted: number } => {
+  const deleteRecurringTransaction = useCallback((id: string, deleteGeneratedTransactions: boolean = true): { recurringDeleted: boolean; transactionsDeleted: number } => {
     let transactionsDeleted = 0;
     
-    console.log(`🗑️ Deletando recorrente ${id}, deleteGenerated: ${deleteGeneratedTransactions}`);
-    
-    // Deletar transações geradas se solicitado
+    // Sempre deletar transações geradas por padrão
     if (deleteGeneratedTransactions) {
       try {
         const existingTransactions = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
         const initialCount = existingTransactions.length;
         
-        // Filtrar transações que NÃO são deste recorrente
         const filteredTransactions = existingTransactions.filter(t => t.recurringId !== id);
         transactionsDeleted = initialCount - filteredTransactions.length;
         
-        console.log(`🗑️ Removendo ${transactionsDeleted} transações geradas`);
-        
-        // Salvar sempre para garantir sincronização
         localStorage.setItem('unifiedFinancialData', JSON.stringify(filteredTransactions));
-        
-        // Forçar atualização da interface
         window.dispatchEvent(new Event('storage'));
         
       } catch (error) {
@@ -95,11 +87,14 @@ export const useRecurringTransactions = () => {
       }
     }
     
-    // Deletar o recorrente SEMPRE
-    setRecurringTransactions(prev => {
-      const filtered = prev.filter(t => t.id !== id);
-      console.log(`🗑️ Recorrente removido. Restam: ${filtered.length}`);
-      return filtered;
+    // Deletar o recorrente
+    setRecurringTransactions(prev => prev.filter(t => t.id !== id));
+    
+    // Limpar cache de processamento
+    Object.keys(sessionStorage).forEach(key => {
+      if (key.includes(id) || key.startsWith('processed_') || key.startsWith('recurring_')) {
+        sessionStorage.removeItem(key);
+      }
     });
     
     return { recurringDeleted: true, transactionsDeleted };

@@ -101,8 +101,9 @@ export const useUnifiedFinancialSystem = () => {
     source: 'manual' | 'recurring' | 'quick-entry' = 'manual'
   ): string => {
     
-    // Verificar duplicatas para recorrentes
+    // Verificar duplicatas para recorrentes com chave única
     if (isRecurring && recurringId) {
+      const duplicateKey = `${recurringId}_${date}_${type}_${amount}`;
       const existing = transactions.find(t => 
         t.recurringId === recurringId && 
         t.date === date && 
@@ -111,9 +112,15 @@ export const useUnifiedFinancialSystem = () => {
       );
       
       if (existing) {
-        console.log(`⏭️ Duplicate prevented: ${sanitizeInput(date)} - ${sanitizeInput(description)}`);
         return existing.id;
       }
+      
+      // Verificar se já foi processado nesta sessão
+      const sessionKey = `recurring_${duplicateKey}`;
+      if (sessionStorage.getItem(sessionKey)) {
+        return '';
+      }
+      sessionStorage.setItem(sessionKey, 'true');
     }
     
     // Verificar data futura para recorrentes
