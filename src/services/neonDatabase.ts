@@ -296,6 +296,73 @@ class NeonDatabase {
       };
     }
   }
+
+  // TRANSAÇÕES RECORRENTES NO NEON
+  async addRecurringTransaction(userId: string, recurring: any) {
+    await this.init();
+    try {
+      await this.sql`
+        INSERT INTO recurring_transactions (
+          id, user_id, type, amount, description, day_of_month,
+          frequency, remaining_count, months_duration, remaining_months,
+          start_date, is_active, created_at, updated_at
+        ) VALUES (
+          ${recurring.id}, ${userId}, ${recurring.type}, ${recurring.amount},
+          ${recurring.description}, ${recurring.dayOfMonth}, ${recurring.frequency},
+          ${recurring.remainingCount || null}, ${recurring.monthsDuration || null},
+          ${recurring.remainingMonths || null}, ${recurring.startDate},
+          ${recurring.isActive}, NOW(), NOW()
+        )
+      `;
+      return true;
+    } catch (error) {
+      console.error('Add recurring error:', error);
+      return false;
+    }
+  }
+
+  async getUserRecurringTransactions(userId: string) {
+    await this.init();
+    try {
+      const result = await this.sql`
+        SELECT * FROM recurring_transactions 
+        WHERE user_id = ${userId} AND is_active = true
+        ORDER BY created_at DESC
+      `;
+      return result.map(row => ({
+        id: row.id,
+        type: row.type,
+        amount: parseFloat(row.amount),
+        description: row.description,
+        dayOfMonth: row.day_of_month,
+        frequency: row.frequency,
+        remainingCount: row.remaining_count,
+        monthsDuration: row.months_duration,
+        remainingMonths: row.remaining_months,
+        startDate: row.start_date,
+        isActive: row.is_active,
+        createdAt: row.created_at
+      }));
+    } catch (error) {
+      console.error('Get recurring error:', error);
+      return [];
+    }
+  }
+
+  async deleteRecurringTransaction(userId: string, recurringId: string) {
+    await this.init();
+    try {
+      await this.sql`
+        UPDATE recurring_transactions 
+        SET is_active = false, updated_at = NOW()
+        WHERE id = ${recurringId} AND user_id = ${userId}
+      `;
+      return true;
+    } catch (error) {
+      console.error('Delete recurring error:', error);
+      return false;
+    }
+  }
 }
 
 export const neonDB = new NeonDatabase();

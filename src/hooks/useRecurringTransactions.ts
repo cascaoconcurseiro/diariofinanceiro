@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { neonDB } from '../services/neonDatabase';
+import { useAuth } from '../contexts/AuthContext';
 
 export interface RecurringTransaction {
   id: string;
@@ -18,32 +20,48 @@ export interface RecurringTransaction {
 const STORAGE_KEY = 'recurringTransactions';
 
 export const useRecurringTransactions = () => {
+  const { user } = useAuth();
   const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
 
-  // Carregar do localStorage
+  // Carregar do Neon ou localStorage
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          setRecurringTransactions(parsed);
+    const loadRecurring = async () => {
+      if (user) {
+        try {
+          const neonRecurring = await neonDB.getUserRecurringTransactions(user.id);
+          setRecurringTransactions(neonRecurring);
+          return;
+        } catch (error) {
+          console.warn('Neon load failed, using localStorage:', error);
         }
-      } catch (error) {
-        console.error('Erro ao carregar transações recorrentes:', error);
-        setRecurringTransactions([]);
       }
-    }
-  }, []);
+      
+      // Fallback localStorage
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            setRecurringTransactions(parsed);
+          }
+        } catch (error) {
+          console.error('Erro ao carregar transações recorrentes:', error);
+          setRecurringTransactions([]);
+        }
+      }
+    };
+    
+    loadRecurring();
+  }, [user]);
 
   // Salvar no localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(recurringTransactions));
   }, [recurringTransactions]);
 
-  const addRecurringTransaction = useCallback((
+  const addRecurringTransaction = useCallback(async (
     transaction: Omit<RecurringTransaction, 'id' | 'createdAt' | 'startDate'>
-  ): RecurringTransaction => {
+  ): Promise<RecurringTransaction> => {
     const now = new Date();
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, transaction.dayOfMonth);
     
@@ -54,9 +72,18 @@ export const useRecurringTransactions = () => {
       startDate: nextMonth.toISOString()
     };
     
+    // Salvar no Neon se logado
+    if (user) {
+      try {
+        await neonDB.addRecurringTransaction(user.id, newTransaction);
+      } catch (error) {
+        console.warn('Neon save failed, using localStorage:', error);
+      }
+    }
+    
     setRecurringTransactions(prev => [...prev, newTransaction]);
     return newTransaction;
-  }, []);
+  }, [user]);
 
   const updateRecurringTransaction = useCallback((
     id: string, 
@@ -67,10 +94,19 @@ export const useRecurringTransactions = () => {
     );
   }, []);
 
-  const deleteRecurringTransaction = useCallback((id: string, deleteGeneratedTransactions: boolean = true): { recurringDeleted: boolean; transactionsDeleted: number } => {
+  const deleteRecurringTransaction = useCallback(async (id: string, deleteGeneratedTransactions: boolean = true): Promise<{ recurringDeleted: boolean; transactionsDeleted: number }> => {
     let transactionsDeleted = 0;
     
-    // Sempre deletar transações geradas por padrão
+    // Deletar no Neon se logado
+    if (user) {
+      try {
+        await neonDB.deleteRecurringTransaction(user.id, id);
+      } catch (error) {
+        console.warn('Neon delete failed:', error);
+      }
+    }
+    
+    // Deletar transações geradas
     if (deleteGeneratedTransactions) {
       try {
         const existingTransactions = JSON.parse(localStorage.getItem('unifiedFinancialData') || '[]');
@@ -87,10 +123,8 @@ export const useRecurringTransactions = () => {
       }
     }
     
-    // Deletar o recorrente
     setRecurringTransactions(prev => prev.filter(t => t.id !== id));
     
-    // Limpar cache de processamento
     Object.keys(sessionStorage).forEach(key => {
       if (key.includes(id) || key.startsWith('processed_') || key.startsWith('recurring_')) {
         sessionStorage.removeItem(key);
@@ -98,7 +132,7 @@ export const useRecurringTransactions = () => {
     });
     
     return { recurringDeleted: true, transactionsDeleted };
-  }, []);
+  }, [user]);
 
   const cancelRecurringFromDate = useCallback((id: string, fromDate: string): { recurringCancelled: boolean; futureTransactionsRemoved: number } => {
     let futureTransactionsRemoved = 0;
